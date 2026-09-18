@@ -20,6 +20,8 @@ import (
 	"github.com/Golden-Apple-Research/nile-terraform/internal/nileapi"
 )
 
+// Compile-time assertions that provisionedDatabaseResource implements the
+// required resource interfaces.
 var (
 	_ resource.Resource              = &provisionedDatabaseResource{}
 	_ resource.ResourceWithConfigure = &provisionedDatabaseResource{}
@@ -31,28 +33,47 @@ func NewProvisionedDatabaseResource() resource.Resource {
 	return &provisionedDatabaseResource{}
 }
 
+// provisionedDatabaseResource implements the nile_provisioned_database
+// resource.
 type provisionedDatabaseResource struct {
+	// client is the Nile API client injected by Configure.
 	client *nileapi.Client
 }
 
+// provisionedDatabaseResourceModel is the Terraform state of a
+// nile_provisioned_database resource.
 type provisionedDatabaseResourceModel struct {
-	Region       types.String `tfsdk:"region"`
-	ClaimCode    types.String `tfsdk:"claim_code"`
-	DatabaseID   types.String `tfsdk:"database_id"`
+	// Region is the region the database was provisioned in.
+	Region types.String `tfsdk:"region"`
+	// ClaimCode is the code that attaches the database to a workspace; it is
+	// consumed by the claim.
+	ClaimCode types.String `tfsdk:"claim_code"`
+	// DatabaseID is the identifier of the provisioned database.
+	DatabaseID types.String `tfsdk:"database_id"`
+	// DatabaseName is the server-assigned name of the provisioned database.
 	DatabaseName types.String `tfsdk:"database_name"`
-	APIHost      types.String `tfsdk:"api_host"`
-	DBHost       types.String `tfsdk:"db_host"`
+	// APIHost is the HTTPS API host of the dedicated database.
+	APIHost types.String `tfsdk:"api_host"`
+	// DBHost is the Postgres connection host of the dedicated database.
+	DBHost types.String `tfsdk:"db_host"`
+	// CredentialID is the identifier of the bootstrap credential.
 	CredentialID types.String `tfsdk:"credential_id"`
-	Username     types.String `tfsdk:"username"`
-	Password     types.String `tfsdk:"password"`
-	Sharded      types.Bool   `tfsdk:"sharded"`
-	Raw          types.String `tfsdk:"raw_json"`
+	// Username is the one-time bootstrap username.
+	Username types.String `tfsdk:"username"`
+	// Password is the one-time bootstrap password returned at provisioning.
+	Password types.String `tfsdk:"password"`
+	// Sharded reports whether the provisioned database is sharded.
+	Sharded types.Bool `tfsdk:"sharded"`
+	// Raw is the redacted JSON payload of the provisioning response.
+	Raw types.String `tfsdk:"raw_json"`
 }
 
+// Metadata sets the resource type name to "nile_provisioned_database".
 func (r *provisionedDatabaseResource) Metadata(_ context.Context, _ resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = "nile_provisioned_database"
 }
 
+// Schema defines the nile_provisioned_database attributes.
 func (r *provisionedDatabaseResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Provisions a dedicated database via the unauthenticated " +
@@ -148,6 +169,7 @@ func (r *provisionedDatabaseResource) Schema(_ context.Context, _ resource.Schem
 	}
 }
 
+// Configure stores the *nileapi.Client handed out by the provider.
 func (r *provisionedDatabaseResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
@@ -160,6 +182,8 @@ func (r *provisionedDatabaseResource) Configure(_ context.Context, req resource.
 	r.client = client
 }
 
+// Create provisions a dedicated database via the unauthenticated
+// provision endpoint and stores the claim code and connection details.
 func (r *provisionedDatabaseResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan provisionedDatabaseResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -212,6 +236,8 @@ func (r *provisionedDatabaseResource) Delete(ctx context.Context, _ resource.Del
 	tflog.Warn(ctx, "the Nile API does not expose deletion of provisioned databases; the provisioned database is removed from Terraform state only")
 }
 
+// applyProvisionedDatabaseResource merges a provisioning response into the
+// model.
 func applyProvisionedDatabaseResource(m *provisionedDatabaseResourceModel, provisioned nileapi.ProvisionedDatabase) {
 	m.ClaimCode = stringOrNull(provisioned.ClaimCode)
 	m.DatabaseID = stringOrNull(provisioned.DatabaseID)

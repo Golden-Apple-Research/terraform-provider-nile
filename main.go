@@ -21,6 +21,8 @@ var (
 	version string = "dev"
 )
 
+// main serves the Nile provider to Terraform over the plugin protocol and
+// exits non-zero if the server fails.
 func main() {
 	opts := providerserver.ServeOpts{
 		Address: "registry.terraform.io/golden-apple-research/nile",

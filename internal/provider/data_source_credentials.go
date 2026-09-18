@@ -26,15 +26,25 @@ func NewDatabaseCredentialsDataSource() datasource.DataSource {
 	)
 }
 
+// databaseCredentialsDataSourceModel is the state of the
+// nile_database_credentials data source.
 type databaseCredentialsDataSourceModel struct {
-	WorkspaceSlug types.String      `tfsdk:"workspace_slug"`
-	DatabaseName  types.String      `tfsdk:"database_name"`
-	TenantID      types.String      `tfsdk:"tenant_id"`
-	Internal      types.Bool        `tfsdk:"internal"`
-	ID            types.String      `tfsdk:"id"`
-	Credentials   []credentialModel `tfsdk:"credentials"`
+	// WorkspaceSlug is the workspace owning the database.
+	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
+	// DatabaseName is the name of the database.
+	DatabaseName types.String `tfsdk:"database_name"`
+	// TenantID optionally restricts the listing to one tenant.
+	TenantID types.String `tfsdk:"tenant_id"`
+	// Internal optionally restricts the listing to the internal flag.
+	Internal types.Bool `tfsdk:"internal"`
+	// ID is the stable identifier of this data source instance.
+	ID types.String `tfsdk:"id"`
+	// Credentials are the credentials found for the database.
+	Credentials []credentialModel `tfsdk:"credentials"`
 }
 
+// databaseCredentialsSchema builds the schema of the database credentials
+// data source.
 func databaseCredentialsSchema(_ context.Context) schema.Schema {
 	return schema.Schema{
 		MarkdownDescription: "Lists the credentials of a Nile database via " +
@@ -76,6 +86,8 @@ func databaseCredentialsSchema(_ context.Context) schema.Schema {
 	}
 }
 
+// readDatabaseCredentials lists the credentials of a database and populates
+// the data source state from them.
 func readDatabaseCredentials(ctx context.Context, client *nileapi.Client, data *databaseCredentialsDataSourceModel, resp *datasource.ReadResponse) {
 	workspaceSlug := data.WorkspaceSlug.ValueString()
 	databaseName := data.DatabaseName.ValueString()

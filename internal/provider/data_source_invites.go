@@ -23,13 +23,22 @@ func NewWorkspaceInvitesDataSource() datasource.DataSource {
 	return newReadOnlyDataSource("nile_workspace_invites", workspaceInvitesSchema, readWorkspaceInvites)
 }
 
+// workspaceInvitesDataSourceModel holds the Terraform state of the
+// nile_workspace_invites data source.
 type workspaceInvitesDataSourceModel struct {
-	WorkspaceSlug     types.String  `tfsdk:"workspace_slug"`
-	VerificationState types.String  `tfsdk:"verification_state"`
-	ID                types.String  `tfsdk:"id"`
-	Invites           []inviteModel `tfsdk:"invites"`
+	// WorkspaceSlug is the workspace whose invites are listed.
+	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
+	// VerificationState optionally filters invites by verification state;
+	// empty means no filter.
+	VerificationState types.String `tfsdk:"verification_state"`
+	// ID is the stable data source identifier (the workspace slug).
+	ID types.String `tfsdk:"id"`
+	// Invites are the developer invites found in the workspace.
+	Invites []inviteModel `tfsdk:"invites"`
 }
 
+// workspaceInvitesSchema builds the schema of the nile_workspace_invites
+// data source.
 func workspaceInvitesSchema(_ context.Context) schema.Schema {
 	return schema.Schema{
 		MarkdownDescription: "Lists the developer invites of a workspace via " +
@@ -62,6 +71,9 @@ func workspaceInvitesSchema(_ context.Context) schema.Schema {
 	}
 }
 
+// readWorkspaceInvites lists the developer invites of a workspace via
+// GET /workspaces/{workspaceSlug}/invites, optionally filtered by
+// verification state.
 func readWorkspaceInvites(ctx context.Context, client *nileapi.Client, data *workspaceInvitesDataSourceModel, resp *datasource.ReadResponse) {
 	workspaceSlug := data.WorkspaceSlug.ValueString()
 
@@ -86,12 +98,18 @@ func NewRegionsDataSource() datasource.DataSource {
 	return newReadOnlyDataSource("nile_regions", regionsSchema, readRegions)
 }
 
+// regionsDataSourceModel holds the Terraform state of the nile_regions
+// data source.
 type regionsDataSourceModel struct {
-	WorkspaceSlug types.String   `tfsdk:"workspace_slug"`
-	ID            types.String   `tfsdk:"id"`
-	Regions       []types.String `tfsdk:"regions"`
+	// WorkspaceSlug is the workspace whose regions are listed.
+	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
+	// ID is the stable data source identifier (the workspace slug).
+	ID types.String `tfsdk:"id"`
+	// Regions are the region identifiers available to the workspace, sorted.
+	Regions []types.String `tfsdk:"regions"`
 }
 
+// regionsSchema builds the schema of the nile_regions data source.
 func regionsSchema(_ context.Context) schema.Schema {
 	return schema.Schema{
 		MarkdownDescription: "Lists the region identifiers available to a workspace via " +
@@ -118,6 +136,8 @@ func regionsSchema(_ context.Context) schema.Schema {
 	}
 }
 
+// readRegions lists the region identifiers available to a workspace via
+// GET /workspaces/{workspaceSlug}/regions and sorts them.
 func readRegions(ctx context.Context, client *nileapi.Client, data *regionsDataSourceModel, resp *datasource.ReadResponse) {
 	workspaceSlug := data.WorkspaceSlug.ValueString()
 
@@ -146,12 +166,19 @@ func NewComputeTypesDataSource() datasource.DataSource {
 	return newReadOnlyDataSource("nile_compute_types", computeTypesSchema, readComputeTypes)
 }
 
+// computeTypesDataSourceModel holds the Terraform state of the
+// nile_compute_types data source.
 type computeTypesDataSourceModel struct {
-	WorkspaceSlug types.String       `tfsdk:"workspace_slug"`
-	ID            types.String       `tfsdk:"id"`
-	ComputeTypes  []computeTypeModel `tfsdk:"compute_types"`
+	// WorkspaceSlug is the workspace whose compute types are listed.
+	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
+	// ID is the stable data source identifier (the workspace slug).
+	ID types.String `tfsdk:"id"`
+	// ComputeTypes are the compute types available to the workspace.
+	ComputeTypes []computeTypeModel `tfsdk:"compute_types"`
 }
 
+// computeTypesSchema builds the schema of the nile_compute_types data
+// source.
 func computeTypesSchema(_ context.Context) schema.Schema {
 	return schema.Schema{
 		MarkdownDescription: "Lists the dedicated compute instance types available to a workspace via " +
@@ -177,6 +204,8 @@ func computeTypesSchema(_ context.Context) schema.Schema {
 	}
 }
 
+// readComputeTypes lists the dedicated compute types available to a
+// workspace via GET /workspaces/{workspaceSlug}/compute-types.
 func readComputeTypes(ctx context.Context, client *nileapi.Client, data *computeTypesDataSourceModel, resp *datasource.ReadResponse) {
 	workspaceSlug := data.WorkspaceSlug.ValueString()
 

@@ -1,0 +1,14 @@
+# Known Schemathesis deviations, one fingerprint per line.
+# Regenerate deliberately: tests/api/run-schemathesis.sh with
+# ST_REPORT_DIR set, then:
+#   check-schemathesis-baseline.py REPORT.xml BASELINE --update
+DELETE /workspaces/{workspaceSlug}/databases/{databaseName}/credentials/{credentialId} :: Undocumented HTTP status code
+GET /developers/me :: Response violates schema
+GET /workspaces/{workspaceSlug} :: Response violates schema
+GET /workspaces/{workspaceSlug}/databases :: Response violates schema
+GET /workspaces/{workspaceSlug}/databases/{databaseName}/compute :: Undocumented HTTP status code
+GET /workspaces/{workspaceSlug}/databases/{databaseName}/credentials :: Undocumented HTTP status code
+POST /workspaces :: Undocumented HTTP status code
+POST /workspaces/{workspaceSlug}/databases :: Response violates schema
+POST /workspaces/{workspaceSlug}/databases/{databaseName}/compute :: Undocumented HTTP status code
+POST /workspaces/{workspaceSlug}/databases/{databaseName}/credentials :: Undocumented HTTP status code

@@ -21,6 +21,8 @@ import (
 	"github.com/Golden-Apple-Research/nile-terraform/internal/nileapi"
 )
 
+// Compile-time assertions that developerInviteResource implements the
+// required resource interfaces.
 var (
 	_ resource.Resource                = &developerInviteResource{}
 	_ resource.ResourceWithConfigure   = &developerInviteResource{}
@@ -32,27 +34,44 @@ func NewDeveloperInviteResource() resource.Resource {
 	return &developerInviteResource{}
 }
 
+// developerInviteResource implements the nile_developer_invite resource.
 type developerInviteResource struct {
+	// client is the Nile API client injected by Configure.
 	client *nileapi.Client
 }
 
+// developerInviteResourceModel is the Terraform state of a
+// nile_developer_invite resource.
 type developerInviteResourceModel struct {
-	WorkspaceSlug     types.String `tfsdk:"workspace_slug"`
-	Email             types.String `tfsdk:"email"`
-	Programmatic      types.Bool   `tfsdk:"programmatic"`
-	ID                types.String `tfsdk:"id"`
+	// WorkspaceSlug is the workspace the invite belongs to.
+	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
+	// Email is the email address of the invitee.
+	Email types.String `tfsdk:"email"`
+	// Programmatic reports whether the invite returns a code instead of
+	// sending an email.
+	Programmatic types.Bool `tfsdk:"programmatic"`
+	// ID is the invite identifier assigned by the API.
+	ID types.String `tfsdk:"id"`
+	// VerificationState is the verification state of the invite.
 	VerificationState types.String `tfsdk:"verification_state"`
-	Code              types.String `tfsdk:"code"`
-	SenderEmail       types.String `tfsdk:"sender_email"`
-	Created           types.String `tfsdk:"created"`
-	Updated           types.String `tfsdk:"updated"`
-	Raw               types.String `tfsdk:"raw_json"`
+	// Code is the one-time invite code of a programmatic invite.
+	Code types.String `tfsdk:"code"`
+	// SenderEmail is the email address of the developer who sent the invite.
+	SenderEmail types.String `tfsdk:"sender_email"`
+	// Created is the creation timestamp.
+	Created types.String `tfsdk:"created"`
+	// Updated is the last update timestamp.
+	Updated types.String `tfsdk:"updated"`
+	// Raw is the redacted JSON payload of the API response.
+	Raw types.String `tfsdk:"raw_json"`
 }
 
+// Metadata sets the resource type name to "nile_developer_invite".
 func (r *developerInviteResource) Metadata(_ context.Context, _ resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = "nile_developer_invite"
 }
 
+// Schema defines the nile_developer_invite attributes.
 func (r *developerInviteResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages a developer invite of a Nile workspace via " +
@@ -129,6 +148,7 @@ func (r *developerInviteResource) Schema(_ context.Context, _ resource.SchemaReq
 	}
 }
 
+// Configure stores the *nileapi.Client handed out by the provider.
 func (r *developerInviteResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
@@ -144,6 +164,8 @@ func (r *developerInviteResource) Configure(_ context.Context, req resource.Conf
 	r.client = client
 }
 
+// Create invites a developer to the workspace, falling back to a lookup by
+// email when the create response carries no invite body.
 func (r *developerInviteResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan developerInviteResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -190,6 +212,8 @@ func (r *developerInviteResource) Create(ctx context.Context, req resource.Creat
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
+// Read refreshes the invite state from the workspace invite list and removes
+// the resource from state when the invite no longer exists.
 func (r *developerInviteResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state developerInviteResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -228,6 +252,8 @@ func (r *developerInviteResource) Read(ctx context.Context, req resource.ReadReq
 	resp.State.RemoveResource(ctx)
 }
 
+// Update always fails: every configurable attribute forces replacement, so
+// the framework should replace the resource instead of calling Update.
 func (r *developerInviteResource) Update(_ context.Context, _ resource.UpdateRequest, resp *resource.UpdateResponse) {
 	// Every configurable attribute is ForceNew, so the framework replaces the
 	// resource instead of calling Update.
@@ -238,6 +264,8 @@ func (r *developerInviteResource) Update(_ context.Context, _ resource.UpdateReq
 	)
 }
 
+// Delete revokes the invite via the Nile API and removes the resource from
+// state.
 func (r *developerInviteResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state developerInviteResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -264,6 +292,7 @@ func (r *developerInviteResource) Delete(ctx context.Context, req resource.Delet
 	resp.State.RemoveResource(ctx)
 }
 
+// ImportState imports an invite from a `workspace_slug/invite_id` ID.
 func (r *developerInviteResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	parts, err := splitResourceID(req.ID, 2)
 	if err != nil {

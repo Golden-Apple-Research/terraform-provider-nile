@@ -23,14 +23,22 @@ func NewWorkspaceDataSource() datasource.DataSource {
 	return newReadOnlyDataSource("nile_workspace", workspaceDataSourceSchema, readWorkspace)
 }
 
+// workspaceDataSourceModel is the Terraform model of the nile_workspace
+// data source, which reads a single workspace.
 type workspaceDataSourceModel struct {
-	Slug             types.String `tfsdk:"slug"`
-	ID               types.String `tfsdk:"id"`
-	Name             types.String `tfsdk:"name"`
+	// Slug is the globally unique slug of the workspace to read.
+	Slug types.String `tfsdk:"slug"`
+	// ID is the workspace identifier (`id` in the API response).
+	ID types.String `tfsdk:"id"`
+	// Name is the workspace name.
+	Name types.String `tfsdk:"name"`
+	// StripeCustomerID is the Stripe customer linked to the workspace, if any.
 	StripeCustomerID types.String `tfsdk:"stripe_customer_id"`
-	Created          types.String `tfsdk:"created"`
+	// Created is the creation timestamp.
+	Created types.String `tfsdk:"created"`
 }
 
+// workspaceDataSourceSchema returns the schema of the nile_workspace data source.
 func workspaceDataSourceSchema(_ context.Context) schema.Schema {
 	return schema.Schema{
 		MarkdownDescription: "Fetches a single Nile workspace via " +
@@ -63,6 +71,7 @@ func workspaceDataSourceSchema(_ context.Context) schema.Schema {
 	}
 }
 
+// readWorkspace fetches a single workspace and fills the data source model.
 func readWorkspace(ctx context.Context, client *nileapi.Client, data *workspaceDataSourceModel, resp *datasource.ReadResponse) {
 	slug := data.Slug.ValueString()
 
@@ -89,11 +98,16 @@ func NewWorkspacesDataSource() datasource.DataSource {
 	return newReadOnlyDataSource("nile_workspaces", workspacesDataSourceSchema, readWorkspaces)
 }
 
+// workspacesDataSourceModel is the Terraform model of the nile_workspaces
+// list data source.
 type workspacesDataSourceModel struct {
-	ID         types.String     `tfsdk:"id"`
+	// ID is the stable identifier of this data source instance (`workspaces`).
+	ID types.String `tfsdk:"id"`
+	// Workspaces are the workspaces visible to the authenticated developer.
 	Workspaces []workspaceModel `tfsdk:"workspaces"`
 }
 
+// workspacesDataSourceSchema returns the schema of the nile_workspaces data source.
 func workspacesDataSourceSchema(_ context.Context) schema.Schema {
 	return schema.Schema{
 		MarkdownDescription: "Lists all Nile workspaces the authenticated developer " +
@@ -112,6 +126,7 @@ func workspacesDataSourceSchema(_ context.Context) schema.Schema {
 	}
 }
 
+// readWorkspaces lists the workspaces the authenticated developer has access to.
 func readWorkspaces(ctx context.Context, client *nileapi.Client, data *workspacesDataSourceModel, resp *datasource.ReadResponse) {
 	workspaces, err := client.ListWorkspaces(ctx)
 	if err != nil {
@@ -138,12 +153,18 @@ func NewWorkspaceDevelopersDataSource() datasource.DataSource {
 	)
 }
 
+// workspaceDevelopersDataSourceModel is the Terraform model of the
+// nile_workspace_developers data source.
 type workspaceDevelopersDataSourceModel struct {
-	WorkspaceSlug types.String     `tfsdk:"workspace_slug"`
-	ID            types.String     `tfsdk:"id"`
-	Developers    []developerModel `tfsdk:"developers"`
+	// WorkspaceSlug is the slug of the workspace whose developers are listed.
+	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
+	// ID is the stable identifier of this data source instance (the workspace slug).
+	ID types.String `tfsdk:"id"`
+	// Developers are the developers with access to the workspace.
+	Developers []developerModel `tfsdk:"developers"`
 }
 
+// workspaceDevelopersSchema returns the schema of the nile_workspace_developers data source.
 func workspaceDevelopersSchema(_ context.Context) schema.Schema {
 	return schema.Schema{
 		MarkdownDescription: "Lists the developers with access to a workspace via " +
@@ -169,6 +190,7 @@ func workspaceDevelopersSchema(_ context.Context) schema.Schema {
 	}
 }
 
+// readWorkspaceDevelopers lists the developers with access to a workspace.
 func readWorkspaceDevelopers(ctx context.Context, client *nileapi.Client, data *workspaceDevelopersDataSourceModel, resp *datasource.ReadResponse) {
 	workspaceSlug := data.WorkspaceSlug.ValueString()
 

@@ -27,45 +27,77 @@ func NewWorkspaceComputeUsageDataSource() datasource.DataSource {
 	)
 }
 
+// chartPointModel is one point of the usage chart.
 type chartPointModel struct {
-	X types.Int64   `tfsdk:"x"`
+	// X is the point on the x axis.
+	X types.Int64 `tfsdk:"x"`
+	// Y is the point on the y axis.
 	Y types.Float64 `tfsdk:"y"`
 }
 
+// instanceUsageModel is the usage of a single compute instance.
 type instanceUsageModel struct {
-	Name           types.String  `tfsdk:"name"`
-	Size           types.String  `tfsdk:"size"`
+	// Name is the instance name.
+	Name types.String `tfsdk:"name"`
+	// Size is the instance compute size.
+	Size types.String `tfsdk:"size"`
+	// TotalVCPUHours is the total vCPU hours consumed by the instance.
 	TotalVCPUHours types.Float64 `tfsdk:"total_vcpu_hours"`
-	Start          types.String  `tfsdk:"start"`
-	End            types.String  `tfsdk:"end"`
+	// Start is the start of the instance usage window.
+	Start types.String `tfsdk:"start"`
+	// End is the end of the instance usage window.
+	End types.String `tfsdk:"end"`
 }
 
+// databaseUsageModel is the usage of one database within a period.
 type databaseUsageModel struct {
-	Name           types.String         `tfsdk:"name"`
-	TotalVCPUHours types.Float64        `tfsdk:"total_vcpu_hours"`
-	Start          types.String         `tfsdk:"start"`
-	End            types.String         `tfsdk:"end"`
-	Instances      []instanceUsageModel `tfsdk:"instances"`
+	// Name is the database name.
+	Name types.String `tfsdk:"name"`
+	// TotalVCPUHours is the total vCPU hours consumed by the database.
+	TotalVCPUHours types.Float64 `tfsdk:"total_vcpu_hours"`
+	// Start is the start of the database usage window.
+	Start types.String `tfsdk:"start"`
+	// End is the end of the database usage window.
+	End types.String `tfsdk:"end"`
+	// Instances are the per-instance usage entries of the database.
+	Instances []instanceUsageModel `tfsdk:"instances"`
 }
 
+// computeUsagePeriodModel is one compute usage period of a workspace.
 type computeUsagePeriodModel struct {
-	TotalVCPUHours types.Float64        `tfsdk:"total_vcpu_hours"`
-	Start          types.String         `tfsdk:"start"`
-	End            types.String         `tfsdk:"end"`
-	MaxCPUCount    types.Int64          `tfsdk:"max_cpu_count"`
-	ChartPoints    []chartPointModel    `tfsdk:"chart_points"`
-	Databases      []databaseUsageModel `tfsdk:"databases"`
-	Raw            types.String         `tfsdk:"raw_json"`
+	// TotalVCPUHours is the total vCPU hours consumed in the period.
+	TotalVCPUHours types.Float64 `tfsdk:"total_vcpu_hours"`
+	// Start is the start of the period.
+	Start types.String `tfsdk:"start"`
+	// End is the end of the period.
+	End types.String `tfsdk:"end"`
+	// MaxCPUCount is the maximum CPU count in the chart data.
+	MaxCPUCount types.Int64 `tfsdk:"max_cpu_count"`
+	// ChartPoints are the chart data points of the period.
+	ChartPoints []chartPointModel `tfsdk:"chart_points"`
+	// Databases are the per-database usage entries of the period.
+	Databases []databaseUsageModel `tfsdk:"databases"`
+	// Raw is the redacted JSON payload of the period.
+	Raw types.String `tfsdk:"raw_json"`
 }
 
+// workspaceComputeUsageDataSourceModel is the state of the
+// nile_workspace_compute_usage data source.
 type workspaceComputeUsageDataSourceModel struct {
-	WorkspaceSlug types.String              `tfsdk:"workspace_slug"`
-	Start         types.String              `tfsdk:"start"`
-	End           types.String              `tfsdk:"end"`
-	ID            types.String              `tfsdk:"id"`
-	Periods       []computeUsagePeriodModel `tfsdk:"periods"`
+	// WorkspaceSlug is the workspace whose usage is read.
+	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
+	// Start is the optional start of the usage window.
+	Start types.String `tfsdk:"start"`
+	// End is the optional end of the usage window.
+	End types.String `tfsdk:"end"`
+	// ID is the stable identifier of this data source instance.
+	ID types.String `tfsdk:"id"`
+	// Periods are the compute usage periods returned by the API.
+	Periods []computeUsagePeriodModel `tfsdk:"periods"`
 }
 
+// workspaceComputeUsageSchema builds the schema of the workspace compute
+// usage data source.
 func workspaceComputeUsageSchema(_ context.Context) schema.Schema {
 	return schema.Schema{
 		MarkdownDescription: "Lists the compute usage of a workspace via " +
@@ -140,6 +172,8 @@ func workspaceComputeUsageSchema(_ context.Context) schema.Schema {
 	}
 }
 
+// readWorkspaceComputeUsage fetches the compute usage of a workspace and
+// populates the data source state from it.
 func readWorkspaceComputeUsage(ctx context.Context, client *nileapi.Client, data *workspaceComputeUsageDataSourceModel, resp *datasource.ReadResponse) {
 	workspaceSlug := data.WorkspaceSlug.ValueString()
 

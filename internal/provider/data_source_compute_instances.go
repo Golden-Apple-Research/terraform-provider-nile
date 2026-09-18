@@ -34,25 +34,43 @@ func NewDatabaseComputeInstancesDataSource() datasource.DataSource {
 	)
 }
 
+// computeInstanceModel is the Terraform model of one dedicated compute
+// instance inside the nile_database_compute_instances list.
 type computeInstanceModel struct {
-	ID        types.String `tfsdk:"id"`
-	Name      types.String `tfsdk:"name"`
-	Status    types.String `tfsdk:"status"`
-	Size      types.String `tfsdk:"size"`
-	Region    types.String `tfsdk:"region"`
+	// ID is the instance identifier (`instanceId` in the API response).
+	ID types.String `tfsdk:"id"`
+	// Name is the instance name (`instanceName` in the API response).
+	Name types.String `tfsdk:"name"`
+	// Status is the instance status (`PENDING`, `PROVISIONING`, `READY`, `RESIZING`, `DELETING`, `FAILED` or `TERMINATED`).
+	Status types.String `tfsdk:"status"`
+	// Size is the compute size of the instance's current type.
+	Size types.String `tfsdk:"size"`
+	// Region is the region the instance runs in.
+	Region types.String `tfsdk:"region"`
+	// CreatedAt is the instance creation timestamp.
 	CreatedAt types.String `tfsdk:"created_at"`
-	Raw       types.String `tfsdk:"raw_json"`
+	// Raw is the redacted JSON payload of the instance as returned by the API.
+	Raw types.String `tfsdk:"raw_json"`
 }
 
+// computeInstancesDataSourceModel is the Terraform model of the
+// nile_database_compute_instances data source.
 type computeInstancesDataSourceModel struct {
-	WorkspaceSlug types.String           `tfsdk:"workspace_slug"`
-	DatabaseName  types.String           `tfsdk:"database_name"`
-	Start         types.String           `tfsdk:"start"`
-	End           types.String           `tfsdk:"end"`
-	ID            types.String           `tfsdk:"id"` // data-source id
-	Instances     []computeInstanceModel `tfsdk:"instances"`
+	// WorkspaceSlug is the slug of the workspace that owns the database.
+	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
+	// DatabaseName is the name of the database whose instances are listed.
+	DatabaseName types.String `tfsdk:"database_name"`
+	// Start optionally marks the beginning of the time window to search (RFC3339).
+	Start types.String `tfsdk:"start"`
+	// End optionally marks the end of the time window to search (RFC3339).
+	End types.String `tfsdk:"end"`
+	// ID is the stable identifier of this data source instance.
+	ID types.String `tfsdk:"id"` // data-source id
+	// Instances are the dedicated compute instances found for the database.
+	Instances []computeInstanceModel `tfsdk:"instances"`
 }
 
+// computeInstancesSchema returns the schema of the nile_database_compute_instances data source.
 func computeInstancesSchema(_ context.Context) schema.Schema {
 	return schema.Schema{
 		MarkdownDescription: "Lists the dedicated compute instances attached to a Nile database, via " +
@@ -134,6 +152,8 @@ func computeInstancesSchema(_ context.Context) schema.Schema {
 	}
 }
 
+// readComputeInstances lists the database's dedicated compute instances,
+// optionally restricted to the time window given by start and end.
 func readComputeInstances(ctx context.Context, client *nileapi.Client, data *computeInstancesDataSourceModel, resp *datasource.ReadResponse) {
 	workspaceSlug := data.WorkspaceSlug.ValueString()
 	databaseName := data.DatabaseName.ValueString()

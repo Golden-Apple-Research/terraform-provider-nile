@@ -20,6 +20,8 @@ import (
 	"github.com/Golden-Apple-Research/nile-terraform/internal/nileapi"
 )
 
+// Compile-time assertions that workspaceResource implements the required
+// resource interfaces.
 var (
 	_ resource.Resource                = &workspaceResource{}
 	_ resource.ResourceWithConfigure   = &workspaceResource{}
@@ -31,23 +33,34 @@ func NewWorkspaceResource() resource.Resource {
 	return &workspaceResource{}
 }
 
+// workspaceResource implements the nile_workspace resource.
 type workspaceResource struct {
+	// client is the Nile API client injected by Configure.
 	client *nileapi.Client
 }
 
+// workspaceResourceModel is the Terraform state of a nile_workspace resource.
 type workspaceResourceModel struct {
-	Name             types.String `tfsdk:"name"`
-	ID               types.String `tfsdk:"id"`
-	Slug             types.String `tfsdk:"slug"`
-	Created          types.String `tfsdk:"created"`
+	// Name is the display name of the workspace.
+	Name types.String `tfsdk:"name"`
+	// ID is the workspace identifier assigned by the API.
+	ID types.String `tfsdk:"id"`
+	// Slug is the URL-safe identifier used to reference the workspace.
+	Slug types.String `tfsdk:"slug"`
+	// Created is the creation timestamp.
+	Created types.String `tfsdk:"created"`
+	// StripeCustomerID is the billing customer linked to the workspace.
 	StripeCustomerID types.String `tfsdk:"stripe_customer_id"`
-	Raw              types.String `tfsdk:"raw_json"`
+	// Raw is the redacted JSON of the API response.
+	Raw types.String `tfsdk:"raw_json"`
 }
 
+// Metadata sets the resource type name to "nile_workspace".
 func (r *workspaceResource) Metadata(_ context.Context, _ resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = "nile_workspace"
 }
 
+// Schema defines the nile_workspace attributes.
 func (r *workspaceResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages a Nile workspace via `POST /workspaces`. " +
@@ -93,6 +106,7 @@ func (r *workspaceResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 	}
 }
 
+// Configure stores the *nileapi.Client handed out by the provider.
 func (r *workspaceResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
@@ -105,6 +119,7 @@ func (r *workspaceResource) Configure(_ context.Context, req resource.ConfigureR
 	r.client = client
 }
 
+// Create creates the workspace via the Nile API and writes it to state.
 func (r *workspaceResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan workspaceResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -136,6 +151,8 @@ func (r *workspaceResource) Create(ctx context.Context, req resource.CreateReque
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
+// Read refreshes the workspace state from the API and removes the resource
+// from state when the workspace no longer exists.
 func (r *workspaceResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state workspaceResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -164,6 +181,8 @@ func (r *workspaceResource) Read(ctx context.Context, req resource.ReadRequest, 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
+// Update copies the plan into state; every configurable attribute forces
+// replacement, so there is nothing to update remotely.
 func (r *workspaceResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	// Every configurable attribute forces replacement; the framework calls
 	// Update only for computed drift, which Create and Read already covered.
@@ -172,16 +191,20 @@ func (r *workspaceResource) Update(ctx context.Context, req resource.UpdateReque
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
+// Delete removes the resource from state; the Nile API has no workspace
+// deletion endpoint, so the workspace keeps running in the control plane.
 func (r *workspaceResource) Delete(ctx context.Context, _ resource.DeleteRequest, _ *resource.DeleteResponse) {
 	// The Nile API has no workspace deletion endpoint. Removing the resource
 	// from state is the only sensible action; log it loudly.
 	tflog.Warn(ctx, "the Nile API does not support workspace deletion; the workspace is removed from Terraform state only and keeps running in the control plane")
 }
 
+// ImportState imports a workspace by its slug.
 func (r *workspaceResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("slug"), req, resp)
 }
 
+// applyWorkspaceResource merges an API workspace into the model.
 func applyWorkspaceResource(m *workspaceResourceModel, workspace nileapi.Workspace) {
 	m.ID = stringOrNull(workspace.ID)
 	m.Slug = stringOrNull(workspace.Slug)

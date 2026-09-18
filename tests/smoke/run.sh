@@ -14,8 +14,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PORT="${NILE_MOCK_PORT:-18080}"
 TOKEN="test-token-123"
+# NILE_MOCK_URL points the smoke test at an already-running API endpoint
+# (e.g. the Prism OpenAPI validation proxy started by tests/api/run-prism-proxy.sh)
+# instead of letting this script start its own mock API.
+MOCK_URL="${NILE_MOCK_URL:-http://127.0.0.1:$PORT}"
 
-for cmd in go terraform python3; do
+for cmd in go terraform python3 curl; do
   command -v "$cmd" >/dev/null || { echo "missing required command: $cmd" >&2; exit 1; }
 done
 
@@ -44,32 +48,44 @@ provider_installation {
 }
 EOF
 
-# Make the mock answer the very first request with a transient 503 so the
-# smoke test also exercises the provider's retry logic.
-export MOCK_FAIL_FIRST=1
-python3 "$ROOT/tests/mockserver.py" "$PORT" >"$TMP/mock.log" 2>&1 &
-MOCK_PID=$!
+if [ -n "${NILE_MOCK_URL:-}" ]; then
+  # Run against an already-running endpoint (e.g. the Prism OpenAPI
+  # validation proxy started by tests/api/run-prism-proxy.sh). The external
+  # service owns startup and lifecycle; only check that it answers.
+  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$MOCK_URL/" || true)"
+  if [ -z "$code" ] || [ "$code" = "000" ]; then
+    echo "external mock API at $MOCK_URL is not reachable" >&2
+    exit 1
+  fi
+  echo "==> using external mock API at $MOCK_URL"
+else
+  # Make the mock answer the very first request with a transient 503 so the
+  # smoke test also exercises the provider's retry logic.
+  export MOCK_FAIL_FIRST=1
+  python3 "$ROOT/tests/mockserver.py" "$PORT" >"$TMP/mock.log" 2>&1 &
+  MOCK_PID=$!
 
-# Wait for the mock to signal readiness instead of sleeping for a fixed
-# amount of time. This also fails fast, with the log attached, when the
-# process dies (e.g. the port is already taken by a stale run).
-mock_ready=0
-for _ in $(seq 1 100); do
-  if grep -q "listening" "$TMP/mock.log" 2>/dev/null; then
-    mock_ready=1
-    break
+  # Wait for the mock to signal readiness instead of sleeping for a fixed
+  # amount of time. This also fails fast, with the log attached, when the
+  # process dies (e.g. the port is already taken by a stale run).
+  mock_ready=0
+  for _ in $(seq 1 100); do
+    if grep -q "listening" "$TMP/mock.log" 2>/dev/null; then
+      mock_ready=1
+      break
+    fi
+    if ! kill -0 "$MOCK_PID" 2>/dev/null; then
+      break
+    fi
+    sleep 0.1
+  done
+  if [ "$mock_ready" -ne 1 ]; then
+    echo "mock API did not start on port $PORT:" >&2
+    cat "$TMP/mock.log" >&2
+    exit 1
   fi
-  if ! kill -0 "$MOCK_PID" 2>/dev/null; then
-    break
-  fi
-  sleep 0.1
-done
-if [ "$mock_ready" -ne 1 ]; then
-  echo "mock API did not start on port $PORT:" >&2
-  cat "$TMP/mock.log" >&2
-  exit 1
+  echo "==> mock API ready on 127.0.0.1:$PORT (first request will fail with 503 to exercise retries)"
 fi
-echo "==> mock API ready on 127.0.0.1:$PORT (first request will fail with 503 to exercise retries)"
 
 cp "$ROOT/tests/smoke/main.tf" "$TMP/work/"
 export TF_CLI_CONFIG_FILE="$TMP/terraformrc"
@@ -77,7 +93,7 @@ export NILE_API_TOKEN="$TOKEN"
 
 apply() {
   if ! terraform -chdir="$TMP/work" apply -auto-approve -input=false -no-color \
-    -var="nile_api_url=http://127.0.0.1:$PORT" "$@" \
+    -var="nile_api_url=$MOCK_URL" "$@" \
     | tee "$TMP/apply.log" >/dev/null; then
     echo "terraform apply $* failed; mock API log:" >&2
     cat "$TMP/mock.log" >&2
@@ -281,7 +297,7 @@ PY
 # --- phase 4: destroy everything ---------------------------------------------
 echo "==> phase 4/4: destroy everything"
 if ! terraform -chdir="$TMP/work" destroy -auto-approve -input=false -no-color \
-  -var="nile_api_url=http://127.0.0.1:$PORT" >/dev/null; then
+  -var="nile_api_url=$MOCK_URL" >/dev/null; then
   echo "terraform destroy failed; mock API log:" >&2
   cat "$TMP/mock.log" >&2
   exit 1

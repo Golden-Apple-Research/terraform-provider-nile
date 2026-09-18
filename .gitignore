@@ -16,3 +16,4 @@ override.tf.json
 terraform.rc
 .idea/
 .vscode/
+tests/spec/nile-openapi.json.live

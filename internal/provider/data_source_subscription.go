@@ -26,17 +26,28 @@ func NewWorkspaceSubscriptionDataSource() datasource.DataSource {
 	)
 }
 
+// workspaceSubscriptionDataSourceModel is the Terraform model of the
+// nile_workspace_subscription data source.
 type workspaceSubscriptionDataSourceModel struct {
-	WorkspaceSlug        types.String `tfsdk:"workspace_slug"`
-	ID                   types.String `tfsdk:"id"`
-	Level                types.String `tfsdk:"level"`
-	ValidFrom            types.String `tfsdk:"valid_from"`
-	ValidTo              types.String `tfsdk:"valid_to"`
-	SubscriptionID       types.String `tfsdk:"subscription_id"`
+	// WorkspaceSlug is the slug of the workspace whose subscription is read.
+	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
+	// ID is the stable identifier of this data source instance (the workspace slug).
+	ID types.String `tfsdk:"id"`
+	// Level is the current subscription level.
+	Level types.String `tfsdk:"level"`
+	// ValidFrom is the start of the current subscription period.
+	ValidFrom types.String `tfsdk:"valid_from"`
+	// ValidTo is the end of the current subscription period, if scheduled.
+	ValidTo types.String `tfsdk:"valid_to"`
+	// SubscriptionID is the identifier of the current subscription.
+	SubscriptionID types.String `tfsdk:"subscription_id"`
+	// DefaultPaymentMethod is the default payment method of the subscription, if any.
 	DefaultPaymentMethod types.String `tfsdk:"default_payment_method"`
-	Raw                  types.String `tfsdk:"raw_json"`
+	// Raw is the redacted JSON payload of the subscription as returned by the API.
+	Raw types.String `tfsdk:"raw_json"`
 }
 
+// workspaceSubscriptionSchema returns the schema of the nile_workspace_subscription data source.
 func workspaceSubscriptionSchema(_ context.Context) schema.Schema {
 	return schema.Schema{
 		MarkdownDescription: "Fetches the current subscription of a workspace via " +
@@ -82,6 +93,7 @@ func workspaceSubscriptionSchema(_ context.Context) schema.Schema {
 	}
 }
 
+// readWorkspaceSubscription fetches the current subscription of a workspace.
 func readWorkspaceSubscription(ctx context.Context, client *nileapi.Client, data *workspaceSubscriptionDataSourceModel, resp *datasource.ReadResponse) {
 	workspaceSlug := data.WorkspaceSlug.ValueString()
 
@@ -114,12 +126,19 @@ func NewWorkspaceSubscriptionHistoryDataSource() datasource.DataSource {
 	)
 }
 
+// workspaceSubscriptionHistoryDataSourceModel is the Terraform model of the
+// nile_workspace_subscription_history data source.
 type workspaceSubscriptionHistoryDataSourceModel struct {
-	WorkspaceSlug types.String        `tfsdk:"workspace_slug"`
-	ID            types.String        `tfsdk:"id"`
+	// WorkspaceSlug is the slug of the workspace whose subscription history is read.
+	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
+	// ID is the stable identifier of this data source instance (the workspace slug).
+	ID types.String `tfsdk:"id"`
+	// Subscriptions are the subscription records, most recent first.
 	Subscriptions []subscriptionModel `tfsdk:"subscriptions"`
 }
 
+// workspaceSubscriptionHistorySchema returns the schema of the
+// nile_workspace_subscription_history data source.
 func workspaceSubscriptionHistorySchema(_ context.Context) schema.Schema {
 	return schema.Schema{
 		MarkdownDescription: "Lists all subscription records of a workspace, most recent first, via " +
@@ -145,6 +164,8 @@ func workspaceSubscriptionHistorySchema(_ context.Context) schema.Schema {
 	}
 }
 
+// readWorkspaceSubscriptionHistory lists all subscription records of a
+// workspace, most recent first.
 func readWorkspaceSubscriptionHistory(ctx context.Context, client *nileapi.Client, data *workspaceSubscriptionHistoryDataSourceModel, resp *datasource.ReadResponse) {
 	workspaceSlug := data.WorkspaceSlug.ValueString()
 

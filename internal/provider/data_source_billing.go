@@ -32,21 +32,39 @@ func NewWorkspaceBillingReadinessDataSource() datasource.DataSource {
 	)
 }
 
+// workspaceBillingReadinessDataSourceModel holds the Terraform state of the
+// nile_workspace_billing_readiness data source.
 type workspaceBillingReadinessDataSourceModel struct {
-	WorkspaceSlug        types.String `tfsdk:"workspace_slug"`
-	ID                   types.String `tfsdk:"id"`
-	Workspace            types.String `tfsdk:"workspace"`
-	WorkspaceID          types.String `tfsdk:"workspace_id"`
-	StripeCustomerID     types.String `tfsdk:"stripe_customer_id"`
+	// WorkspaceSlug is the workspace whose billing readiness is read.
+	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
+	// ID is the stable data source identifier (the workspace slug).
+	ID types.String `tfsdk:"id"`
+	// Workspace is the workspace slug as returned by the API.
+	Workspace types.String `tfsdk:"workspace"`
+	// WorkspaceID is the workspace identifier.
+	WorkspaceID types.String `tfsdk:"workspace_id"`
+	// StripeCustomerID is the Stripe customer linked to the workspace, if any.
+	StripeCustomerID types.String `tfsdk:"stripe_customer_id"`
+	// DefaultPaymentMethod is the customer's default payment method ID, if
+	// any.
 	DefaultPaymentMethod types.String `tfsdk:"default_payment_method_id"`
-	Status               types.String `tfsdk:"status"`
-	CheckedAt            types.String `tfsdk:"checked_at"`
-	LastError            types.String `tfsdk:"last_error"`
-	Source               types.String `tfsdk:"source"`
-	Detail               types.String `tfsdk:"detail"`
-	Raw                  types.String `tfsdk:"raw_json"`
+	// Status is the readiness status, e.g. "ready" or "missing_customer".
+	Status types.String `tfsdk:"status"`
+	// CheckedAt is the timestamp of the readiness check.
+	CheckedAt types.String `tfsdk:"checked_at"`
+	// LastError is the last error observed while resolving billing state, if
+	// any.
+	LastError types.String `tfsdk:"last_error"`
+	// Source is the origin of the readiness result.
+	Source types.String `tfsdk:"source"`
+	// Detail is human-readable detail about the readiness result.
+	Detail types.String `tfsdk:"detail"`
+	// Raw is the redacted raw JSON payload returned by the API.
+	Raw types.String `tfsdk:"raw_json"`
 }
 
+// workspaceBillingReadinessSchema builds the schema of the
+// nile_workspace_billing_readiness data source.
 func workspaceBillingReadinessSchema(_ context.Context) schema.Schema {
 	return schema.Schema{
 		MarkdownDescription: "Resolves the billing readiness of a workspace via " +
@@ -108,6 +126,9 @@ func workspaceBillingReadinessSchema(_ context.Context) schema.Schema {
 	}
 }
 
+// readWorkspaceBillingReadiness resolves the billing readiness of a
+// workspace via GET /workspaces/{workspaceSlug}/billing/readiness, without
+// creating a billing customer.
 func readWorkspaceBillingReadiness(ctx context.Context, client *nileapi.Client, data *workspaceBillingReadinessDataSourceModel, resp *datasource.ReadResponse) {
 	workspaceSlug := data.WorkspaceSlug.ValueString()
 
@@ -145,15 +166,25 @@ func NewWorkspaceBillingTotalsDataSource() datasource.DataSource {
 	)
 }
 
+// workspaceBillingTotalsDataSourceModel holds the Terraform state of the
+// nile_workspace_billing_totals data source.
 type workspaceBillingTotalsDataSourceModel struct {
+	// WorkspaceSlug is the workspace whose billing totals are read.
 	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
-	Month         types.String `tfsdk:"month"`
-	ID            types.String `tfsdk:"id"`
-	YM            types.String `tfsdk:"ym"`
-	Totals        types.Map    `tfsdk:"totals"`
-	Raw           types.String `tfsdk:"raw_json"`
+	// Month is the month to report on, in YYYY-MM form.
+	Month types.String `tfsdk:"month"`
+	// ID is the stable data source identifier (<workspaceSlug>/<month>).
+	ID types.String `tfsdk:"id"`
+	// YM is the month as returned by the API.
+	YM types.String `tfsdk:"ym"`
+	// Totals are the rated totals keyed by billing component.
+	Totals types.Map `tfsdk:"totals"`
+	// Raw is the redacted raw JSON payload returned by the API.
+	Raw types.String `tfsdk:"raw_json"`
 }
 
+// workspaceBillingTotalsSchema builds the schema of the
+// nile_workspace_billing_totals data source.
 func workspaceBillingTotalsSchema(_ context.Context) schema.Schema {
 	return schema.Schema{
 		MarkdownDescription: "Fetches the monthly totals by component, from rated lines, via " +
@@ -198,6 +229,8 @@ func workspaceBillingTotalsSchema(_ context.Context) schema.Schema {
 	}
 }
 
+// readWorkspaceBillingTotals fetches the monthly rated totals of a
+// workspace via GET /workspaces/{workspaceSlug}/billing/{ym}/totals.
 func readWorkspaceBillingTotals(ctx context.Context, client *nileapi.Client, data *workspaceBillingTotalsDataSourceModel, resp *datasource.ReadResponse) {
 	workspaceSlug := data.WorkspaceSlug.ValueString()
 	month := data.Month.ValueString()

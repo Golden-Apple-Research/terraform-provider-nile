@@ -21,6 +21,8 @@ import (
 	"github.com/Golden-Apple-Research/nile-terraform/internal/nileapi"
 )
 
+// Compile-time assertions that computeInstanceResource implements the
+// required Terraform Plugin Framework resource interfaces.
 var (
 	_ resource.Resource                = &computeInstanceResource{}
 	_ resource.ResourceWithConfigure   = &computeInstanceResource{}
@@ -33,30 +35,50 @@ func NewComputeInstanceResource() resource.Resource {
 	return &computeInstanceResource{}
 }
 
+// computeInstanceResource implements the nile_database_compute_instance
+// resource, which manages a dedicated compute instance of a database.
 type computeInstanceResource struct {
+	// client is the Nile API client shared by all provider resources.
 	client *nileapi.Client
 }
 
+// computeInstanceResourceModel is the Terraform state model of the
+// nile_database_compute_instance resource.
 type computeInstanceResourceModel struct {
-	WorkspaceSlug types.String   `tfsdk:"workspace_slug"`
-	DatabaseName  types.String   `tfsdk:"database_name"`
-	InstanceName  types.String   `tfsdk:"instance_name"`
-	InstanceSize  types.String   `tfsdk:"instance_size"`
-	ID            types.String   `tfsdk:"id"`
-	Status        types.String   `tfsdk:"status"`
-	Region        types.String   `tfsdk:"region"`
-	Memory        types.String   `tfsdk:"memory"`
-	HourlyCost    types.Float64  `tfsdk:"hourly_cost"`
-	CreatedAt     types.String   `tfsdk:"created_at"`
-	UpdatedAt     types.String   `tfsdk:"updated_at"`
-	Raw           types.String   `tfsdk:"raw_json"`
-	Timeouts      timeouts.Value `tfsdk:"timeouts"`
+	// WorkspaceSlug is the slug of the workspace that owns the database.
+	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
+	// DatabaseName is the name of the database the instance belongs to.
+	DatabaseName types.String `tfsdk:"database_name"`
+	// InstanceName is the name of the compute instance.
+	InstanceName types.String `tfsdk:"instance_name"`
+	// InstanceSize is the compute size of the instance.
+	InstanceSize types.String `tfsdk:"instance_size"`
+	// ID is the instance identifier (`instanceId` in the API response).
+	ID types.String `tfsdk:"id"`
+	// Status is the instance status (`PENDING`, `PROVISIONING`, `READY`, `RESIZING`, `DELETING`, `FAILED` or `TERMINATED`).
+	Status types.String `tfsdk:"status"`
+	// Region is the region the instance runs in.
+	Region types.String `tfsdk:"region"`
+	// Memory is the memory of the instance's current type.
+	Memory types.String `tfsdk:"memory"`
+	// HourlyCost is the hourly cost of the instance's current type in USD.
+	HourlyCost types.Float64 `tfsdk:"hourly_cost"`
+	// CreatedAt is the instance creation timestamp.
+	CreatedAt types.String `tfsdk:"created_at"`
+	// UpdatedAt is the timestamp of the last instance update.
+	UpdatedAt types.String `tfsdk:"updated_at"`
+	// Raw is the redacted JSON payload of the instance as returned by the API.
+	Raw types.String `tfsdk:"raw_json"`
+	// Timeouts holds the configured create/update/delete timeouts.
+	Timeouts timeouts.Value `tfsdk:"timeouts"`
 }
 
+// Metadata sets the Terraform resource type name.
 func (r *computeInstanceResource) Metadata(_ context.Context, _ resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = "nile_database_compute_instance"
 }
 
+// Schema defines the attributes of the nile_database_compute_instance resource.
 func (r *computeInstanceResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages a dedicated compute instance of a Nile database via " +
@@ -141,6 +163,7 @@ func (r *computeInstanceResource) Schema(ctx context.Context, _ resource.SchemaR
 	}
 }
 
+// Configure stores the provider's shared Nile API client on the resource.
 func (r *computeInstanceResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
@@ -156,6 +179,8 @@ func (r *computeInstanceResource) Configure(_ context.Context, req resource.Conf
 	r.client = client
 }
 
+// Create provisions a dedicated compute instance, records it in state as soon
+// as it exists, and waits until it becomes ready.
 func (r *computeInstanceResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan computeInstanceResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -219,6 +244,8 @@ func (r *computeInstanceResource) Create(ctx context.Context, req resource.Creat
 	}
 }
 
+// Read refreshes the compute instance from the Nile API; an instance that no
+// longer exists is removed from state.
 func (r *computeInstanceResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state computeInstanceResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -257,6 +284,7 @@ func (r *computeInstanceResource) Read(ctx context.Context, req resource.ReadReq
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
+// Update renames or resizes the instance in place and waits until it settles.
 func (r *computeInstanceResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan, state computeInstanceResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -320,6 +348,8 @@ func (r *computeInstanceResource) Update(ctx context.Context, req resource.Updat
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
+// Delete removes the compute instance and waits until it is gone; an already
+// deleted instance is treated as success.
 func (r *computeInstanceResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state computeInstanceResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -368,6 +398,8 @@ func (r *computeInstanceResource) Delete(ctx context.Context, req resource.Delet
 	resp.State.RemoveResource(ctx)
 }
 
+// ImportState imports an instance from its
+// `workspace_slug/database_name/instance_id` identifier.
 func (r *computeInstanceResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	parts, err := splitResourceID(req.ID, 3)
 	if err != nil {

@@ -17,10 +17,14 @@ const (
 	// Pagination safety valves. The API currently returns all instances in a
 	// single response; these caps also prevent a server that keeps handing out
 	// fresh continuation tokens from exhausting provider memory.
-	maxPages            = 1000
-	maxPaginationBytes  = 100 << 20 // 100 MiB across all pages
+	// maxPages bounds the number of pages ListComputeInstances follows.
+	maxPages = 1000
+	// maxPaginationBytes bounds the total size of all pages combined.
+	maxPaginationBytes = 100 << 20 // 100 MiB across all pages
+	// maxComputeInstances bounds the total number of returned instances.
 	maxComputeInstances = 100_000
-	pageTokenParam      = "pageToken"
+	// pageTokenParam is the query parameter carrying the continuation token.
+	pageTokenParam = "pageToken"
 )
 
 // ListComputeInstances calls
@@ -78,14 +82,19 @@ func (c *Client) ListComputeInstances(ctx context.Context, workspaceSlug, databa
 
 // CreateComputeInstanceRequest is the body of CreateComputeInstance.
 type CreateComputeInstanceRequest struct {
+	// InstanceName is the user-chosen name of the new instance.
 	InstanceName string `json:"instanceName"`
+	// InstanceSize is the compute size (shape) of the new instance.
 	InstanceSize string `json:"instanceSize"`
 }
 
 // UpdateComputeInstanceRequest is the body of UpdateComputeInstance. Empty
 // fields are omitted, which makes each field independently optional.
 type UpdateComputeInstanceRequest struct {
+	// InstanceName is the new name of the instance, if it should change.
 	InstanceName string `json:"instanceName,omitempty"`
+	// InstanceSize is the new compute size (shape) of the instance, if it
+	// should change.
 	InstanceSize string `json:"instanceSize,omitempty"`
 }
 
@@ -229,28 +238,45 @@ func continuationToken(wrapper map[string]json.RawMessage) string {
 // apiComputeType mirrors ComputeInstanceType with nil-able fields so one bad
 // field does not discard the rest of the payload.
 type apiComputeType struct {
-	ID          *string  `json:"id"`
-	ComputeSize *string  `json:"computeSize"`
-	Memory      *string  `json:"memory"`
-	HourlyCost  *float64 `json:"hourlyCost"`
+	// ID is the compute type identifier.
+	ID *string `json:"id"`
+	// ComputeSize is the size label (shape) of the compute type.
+	ComputeSize *string `json:"computeSize"`
+	// Memory is the memory available to the compute type.
+	Memory *string `json:"memory"`
+	// HourlyCost is the hourly price of the compute type.
+	HourlyCost *float64 `json:"hourlyCost"`
 }
 
 // apiInstance mirrors the documented API fields promoted by the provider.
 // Fields the API adds later stay available via ComputeInstance.Raw.
 type apiInstance struct {
-	InstanceID          *string         `json:"instanceId"`
-	InstanceName        *string         `json:"instanceName"`
-	Status              *string         `json:"status"`
-	Region              *string         `json:"region"`
-	Created             *string         `json:"created"`
-	Updated             *string         `json:"updated"`
-	Deleted             *string         `json:"deleted"`
-	InstanceType        *apiComputeType `json:"instanceType"`
+	// InstanceID is the server-side identifier of the instance.
+	InstanceID *string `json:"instanceId"`
+	// InstanceName is the user-chosen name of the instance.
+	InstanceName *string `json:"instanceName"`
+	// Status is the lifecycle status of the instance (e.g. "READY").
+	Status *string `json:"status"`
+	// Region is the region the instance runs in.
+	Region *string `json:"region"`
+	// Created is the creation timestamp of the instance.
+	Created *string `json:"created"`
+	// Updated is the last update timestamp of the instance.
+	Updated *string `json:"updated"`
+	// Deleted is the deletion timestamp, when the instance was deleted.
+	Deleted *string `json:"deleted"`
+	// InstanceType is the current compute type of the instance.
+	InstanceType *apiComputeType `json:"instanceType"`
+	// DesiredInstanceType is the compute type the instance is resizing to.
 	DesiredInstanceType *apiComputeType `json:"desiredInstanceType"`
-	Workspace           *Workspace      `json:"workspace"`
-	Database            *Database       `json:"database"`
+	// Workspace is the workspace owning the instance, when included.
+	Workspace *Workspace `json:"workspace"`
+	// Database is the database owning the instance, when included.
+	Database *Database `json:"database"`
 }
 
+// mapInstances promotes the documented fields of each raw instance object
+// into a ComputeInstance and keeps the untouched payload in Raw.
 func mapInstances(ctx context.Context, raw []json.RawMessage) []ComputeInstance {
 	out := make([]ComputeInstance, 0, len(raw))
 	for _, r := range raw {
@@ -288,6 +314,8 @@ func mapInstances(ctx context.Context, raw []json.RawMessage) []ComputeInstance 
 	return out
 }
 
+// computeTypeFromAPI converts a nil-able API compute type into its public
+// representation; nil stays nil.
 func computeTypeFromAPI(t *apiComputeType) *ComputeInstanceType {
 	if t == nil {
 		return nil

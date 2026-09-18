@@ -25,15 +25,22 @@ import (
 )
 
 const (
+	// DefaultBaseURL is the Nile API base URL that NewClient falls back to
+	// when it is called with an empty baseURL.
 	DefaultBaseURL = "https://global.thenile.dev"
 
 	// Retry policy for transient failures (rate limiting, 5xx, network
 	// errors). Retries only happen for requests that are safe to replay; see
 	// doWithRetries.
 	defaultMaxRetries = 3
-	retryBaseDelay    = 200 * time.Millisecond
-	retryMaxDelay     = 2 * time.Second
-	retryAfterCap     = 30 * time.Second
+	// retryBaseDelay is the exponential backoff delay before the first
+	// retry; it doubles with each subsequent attempt.
+	retryBaseDelay = 200 * time.Millisecond
+	// retryMaxDelay caps the exponential backoff between retry attempts.
+	retryMaxDelay = 2 * time.Second
+	// retryAfterCap caps the delay honored from a Retry-After response
+	// header so a misbehaving server cannot stall the retry loop.
+	retryAfterCap = 30 * time.Second
 
 	// DefaultPollInterval is the delay between readiness polls for
 	// asynchronous operations.
@@ -48,7 +55,11 @@ const (
 
 // Client talks to the Nile REST API using bearer-token authentication.
 type Client struct {
-	BaseURL   *url.URL
+	// BaseURL is the parsed API base URL; all request URLs are resolved
+	// against it.
+	BaseURL *url.URL
+	// AuthToken is the bearer token sent in the Authorization header of
+	// authenticated requests. It must not contain newlines.
 	AuthToken string
 	// UserAgent, when set, is sent as the User-Agent header on requests so
 	// the API can identify the provider.
@@ -57,7 +68,10 @@ type Client struct {
 	// (HTTP 408/429/5xx or a network error) is retried with exponential
 	// backoff. It defaults to 3; 0 disables retries.
 	MaxRetries int
-	HTTP       *http.Client
+	// HTTP is the HTTP client used for all API requests; NewClient sets a
+	// 30 second timeout and disables redirect following so credentials are
+	// never forwarded to another endpoint.
+	HTTP *http.Client
 	// PollInterval is the delay between polls while waiting for an
 	// asynchronous operation. It defaults to DefaultPollInterval.
 	PollInterval time.Duration
@@ -121,6 +135,9 @@ func NewClient(baseURL, authToken string) (*Client, error) {
 	}, nil
 }
 
+// isLoopbackHost reports whether host is the literal name "localhost" or an
+// IP address in the loopback range. NewClient permits plain HTTP only for
+// such hosts.
 func isLoopbackHost(host string) bool {
 	if strings.EqualFold(host, "localhost") {
 		return true
@@ -132,11 +149,19 @@ func isLoopbackHost(host string) bool {
 // APIError is a structured error returned by the Nile API. It implements
 // error, so callers can use errors.As or the IsNotFound/IsConflict helpers.
 type APIError struct {
-	StatusCode int    `json:"statusCode"`
-	ErrorCode  string `json:"errorCode"`
-	Message    string `json:"message"`
+	// StatusCode is the HTTP status code of the failed response; the real
+	// HTTP status always wins over a contradicting statusCode in the body.
+	StatusCode int `json:"statusCode"`
+	// ErrorCode is the machine-readable error code reported by the API, or
+	// "" if the body did not carry one.
+	ErrorCode string `json:"errorCode"`
+	// Message is the human-readable error text from the API, sanitized of
+	// credential-like content by decodeAPIError.
+	Message string `json:"message"`
 }
 
+// Error renders the API error as "Nile API error (HTTP <status>[ <code>])",
+// followed by the redacted API message when one is present.
 func (e *APIError) Error() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Nile API error (HTTP %d", e.StatusCode)
@@ -196,6 +221,10 @@ func (c *Client) endpoint(segments ...string) *url.URL {
 	return c.BaseURL.ResolveReference(rel)
 }
 
+// escapePathSegment percent-encodes a single URL path segment. The "." and
+// ".." segments are encoded explicitly because url.PathEscape would leave
+// them intact and url.Parse would normalize them away while resolving the
+// reference (see endpoint).
 func escapePathSegment(segment string) string {
 	switch segment {
 	case ".":
@@ -245,10 +274,16 @@ func (c *Client) request(ctx context.Context, method string, u *url.URL, body, o
 	return c.requestWithAuth(ctx, method, u, body, out, true)
 }
 
+// requestWithoutAuth behaves like request but does not send the
+// Authorization header, for endpoints reachable before login such as
+// /oauth2/token.
 func (c *Client) requestWithoutAuth(ctx context.Context, method string, u *url.URL, body, out any) error {
 	return c.requestWithAuth(ctx, method, u, body, out, false)
 }
 
+// requestWithAuth is the shared implementation behind request and
+// requestWithoutAuth: it performs the request exactly like request, but only
+// sets the Authorization header when authenticated is true.
 func (c *Client) requestWithAuth(ctx context.Context, method string, u *url.URL, body, out any, authenticated bool) error {
 	var reader io.Reader
 	contentType := ""
@@ -320,6 +355,7 @@ func (c *Client) post(ctx context.Context, u *url.URL, body, out any) error {
 	return c.request(ctx, http.MethodPost, u, body, out)
 }
 
+// postUnauthenticated performs a POST request without bearer authentication.
 func (c *Client) postUnauthenticated(ctx context.Context, u *url.URL, body, out any) error {
 	return c.requestWithoutAuth(ctx, http.MethodPost, u, body, out)
 }
@@ -351,6 +387,9 @@ func decodeAPIError(status int, payload []byte) error {
 	return fmt.Errorf("Nile API returned HTTP %d", status)
 }
 
+// safeRequestPath returns the escaped path of u for use in error messages,
+// or "/" if u is nil or its path is empty. Only the path is returned, so
+// query strings and any credentials in them never leak into diagnostics.
 func safeRequestPath(u *url.URL) string {
 	if u == nil || u.EscapedPath() == "" {
 		return "/"
@@ -358,6 +397,11 @@ func safeRequestPath(u *url.URL) string {
 	return u.EscapedPath()
 }
 
+// safeAPIErrorCode sanitizes an API error code for inclusion in error
+// messages: line breaks and tabs are replaced with spaces, codes whose
+// normalized form contains a credential-like marker (e.g. "token",
+// "password", "apikey") are replaced with "[REDACTED]", and the result is
+// truncated to at most 64 bytes.
 func safeAPIErrorCode(code string) string {
 	code = strings.TrimSpace(strings.NewReplacer("\r", " ", "\n", " ", "\t", " ").Replace(code))
 	if code == "" {
@@ -375,6 +419,11 @@ func safeAPIErrorCode(code string) string {
 	return truncate([]byte(code), 64)
 }
 
+// safeAPIErrorMessage sanitizes an API error message for inclusion in error
+// diagnostics: line breaks and tabs are replaced with spaces, messages whose
+// normalized form contains a credential-like marker (e.g. "token",
+// "password", "apikey") are replaced with "[REDACTED]", and the result is
+// truncated to at most 256 bytes.
 func safeAPIErrorMessage(message string) string {
 	message = strings.TrimSpace(strings.NewReplacer("\r", " ", "\n", " ", "\t", " ").Replace(message))
 	if message == "" {
@@ -510,6 +559,9 @@ func retryAfterDuration(v string) (time.Duration, bool) {
 	return time.Duration(secs) * time.Second, true
 }
 
+// retryableStatus reports whether an HTTP status code is a transient failure
+// worth retrying: request timeout (408), rate limiting (429), and the
+// internal server and gateway errors 500, 502, 503 and 504.
 func retryableStatus(code int) bool {
 	switch code {
 	case http.StatusRequestTimeout, http.StatusTooManyRequests,

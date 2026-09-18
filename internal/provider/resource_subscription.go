@@ -19,6 +19,8 @@ import (
 	"github.com/Golden-Apple-Research/nile-terraform/internal/nileapi"
 )
 
+// Compile-time assertions that workspaceSubscriptionResource implements the
+// required Terraform Plugin Framework resource interfaces.
 var (
 	_ resource.Resource                = &workspaceSubscriptionResource{}
 	_ resource.ResourceWithConfigure   = &workspaceSubscriptionResource{}
@@ -31,23 +33,36 @@ func NewWorkspaceSubscriptionResource() resource.Resource {
 	return &workspaceSubscriptionResource{}
 }
 
+// workspaceSubscriptionResource implements the nile_workspace_subscription
+// resource, which starts, changes and closes the subscription of a workspace.
 type workspaceSubscriptionResource struct {
+	// client is the Nile API client shared by all provider resources.
 	client *nileapi.Client
 }
 
+// workspaceSubscriptionResourceModel is the Terraform state model of the
+// nile_workspace_subscription resource.
 type workspaceSubscriptionResourceModel struct {
-	WorkspaceSlug  types.String `tfsdk:"workspace_slug"`
-	Level          types.String `tfsdk:"level"`
+	// WorkspaceSlug is the slug of the workspace whose subscription is managed.
+	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
+	// Level is the subscription level, for example `free` or `paid`.
+	Level types.String `tfsdk:"level"`
+	// SubscriptionID is the identifier of the active subscription.
 	SubscriptionID types.String `tfsdk:"subscription_id"`
-	ValidFrom      types.String `tfsdk:"valid_from"`
-	ValidTo        types.String `tfsdk:"valid_to"`
-	Workspace      types.String `tfsdk:"workspace"`
+	// ValidFrom is the start of the subscription validity window.
+	ValidFrom types.String `tfsdk:"valid_from"`
+	// ValidTo is the end of the subscription validity window.
+	ValidTo types.String `tfsdk:"valid_to"`
+	// Workspace is the workspace reference reported by the API.
+	Workspace types.String `tfsdk:"workspace"`
 }
 
+// Metadata sets the Terraform resource type name.
 func (r *workspaceSubscriptionResource) Metadata(_ context.Context, _ resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = "nile_workspace_subscription"
 }
 
+// Schema defines the attributes of the nile_workspace_subscription resource.
 func (r *workspaceSubscriptionResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages the subscription of a Nile workspace via " +
@@ -96,6 +111,7 @@ func (r *workspaceSubscriptionResource) Schema(_ context.Context, _ resource.Sch
 	}
 }
 
+// Configure stores the provider's shared Nile API client on the resource.
 func (r *workspaceSubscriptionResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
@@ -108,6 +124,8 @@ func (r *workspaceSubscriptionResource) Configure(_ context.Context, req resourc
 	r.client = client
 }
 
+// Create starts a subscription for the workspace at the configured level and
+// reads it back to fill the computed attributes.
 func (r *workspaceSubscriptionResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan workspaceSubscriptionResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -142,6 +160,8 @@ func (r *workspaceSubscriptionResource) Create(ctx context.Context, req resource
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
+// Read refreshes the subscription from the Nile API; a subscription that no
+// longer exists is removed from state.
 func (r *workspaceSubscriptionResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state workspaceSubscriptionResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -170,6 +190,7 @@ func (r *workspaceSubscriptionResource) Read(ctx context.Context, req resource.R
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
+// Update changes the subscription level in place via the change endpoint.
 func (r *workspaceSubscriptionResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan workspaceSubscriptionResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -202,6 +223,8 @@ func (r *workspaceSubscriptionResource) Update(ctx context.Context, req resource
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
+// Delete closes the subscription identified in state, looking up its id first
+// when the state predates the computed attribute.
 func (r *workspaceSubscriptionResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state workspaceSubscriptionResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -245,10 +268,12 @@ func (r *workspaceSubscriptionResource) Delete(ctx context.Context, req resource
 	}
 }
 
+// ImportState imports a subscription using the workspace slug as the import ID.
 func (r *workspaceSubscriptionResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("workspace_slug"), req, resp)
 }
 
+// applySubscriptionResource merges an API subscription into the resource model.
 func applySubscriptionResource(m *workspaceSubscriptionResourceModel, sub nileapi.WorkspaceSubscription) {
 	m.Workspace = stringOrNull(sub.Workspace)
 	m.SubscriptionID = stringOrNull(sub.SubscriptionID)

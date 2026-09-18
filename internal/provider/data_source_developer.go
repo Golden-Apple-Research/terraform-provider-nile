@@ -20,15 +20,25 @@ func NewDeveloperDataSource() datasource.DataSource {
 	return newReadOnlyDataSource("nile_developer", developerDataSourceSchema, readDeveloper)
 }
 
+// developerDataSourceModel holds the Terraform state of the nile_developer
+// data source for the authenticated developer.
 type developerDataSourceModel struct {
-	ID         types.String     `tfsdk:"id"`
-	Email      types.String     `tfsdk:"email"`
-	Kind       types.String     `tfsdk:"kind"`
+	// ID is the developer identifier.
+	ID types.String `tfsdk:"id"`
+	// Email is the developer's login email address.
+	Email types.String `tfsdk:"email"`
+	// Kind is the developer account kind as reported by the API.
+	Kind types.String `tfsdk:"kind"`
+	// Workspaces are the workspaces associated with the developer.
 	Workspaces []workspaceModel `tfsdk:"workspaces"`
-	Databases  []databaseModel  `tfsdk:"databases"`
-	Raw        types.String     `tfsdk:"raw_json"`
+	// Databases are the databases associated with the developer.
+	Databases []databaseModel `tfsdk:"databases"`
+	// Raw is the redacted raw JSON payload returned by the API.
+	Raw types.String `tfsdk:"raw_json"`
 }
 
+// developerDataSourceSchema builds the schema of the nile_developer data
+// source.
 func developerDataSourceSchema(_ context.Context) schema.Schema {
 	attrs := developerAttributes()
 	attrs["raw_json"] = schema.StringAttribute{
@@ -47,6 +57,8 @@ func developerDataSourceSchema(_ context.Context) schema.Schema {
 	}
 }
 
+// readDeveloper fetches the authenticated developer via GET /developers/me
+// and fills the data source model from the response.
 func readDeveloper(ctx context.Context, client *nileapi.Client, data *developerDataSourceModel, resp *datasource.ReadResponse) {
 	dev, err := client.GetDeveloper(ctx)
 	if err != nil {

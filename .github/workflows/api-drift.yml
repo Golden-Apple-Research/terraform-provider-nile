@@ -1,0 +1,50 @@
+name: API drift
+
+# Schemathesis fuzzes the stateful mock API against the pinned Nile OpenAPI
+# spec on every relevant PR. The scheduled spec-drift job compares the pinned
+# spec against the live API so upstream contract changes surface here first.
+
+on:
+  schedule:
+    - cron: "23 4 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tests/spec/**"
+      - "tests/api/**"
+      - ".github/workflows/api-drift.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  schemathesis:
+    name: Schemathesis contract fuzz (mock API)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: install schemathesis (pinned)
+        # hypothesis is pinned below 6.113: newer releases removed the
+        # settings._fallback kwarg that schemathesis 3.38.x still passes.
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet 'schemathesis==3.38.*' 'hypothesis<6.113'
+          .venv/bin/st --version
+
+      - name: run schemathesis against the mock API
+        run: tests/api/run-schemathesis.sh .venv/bin/st
+
+  spec-drift:
+    name: Nile spec drift
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: compare pinned spec against the live API
+        run: tests/api/check-drift.sh

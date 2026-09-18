@@ -37,11 +37,14 @@ type attribute interface {
 	IsSensitive() bool
 }
 
+// target pairs a docs file name with its Terraform Registry subcategory.
 type target struct {
 	name        string
 	subcategory string
 }
 
+// resourceTargets lists every resource with its docs file name, subcategory
+// and constructor used to obtain the schema.
 var resourceTargets = []struct {
 	target
 	constructor func() resource.Resource
@@ -56,6 +59,8 @@ var resourceTargets = []struct {
 	{target{"provisioned_database", "Databases"}, provider.NewProvisionedDatabaseResource},
 }
 
+// dataSourceTargets lists every data source with its docs file name,
+// subcategory and constructor used to obtain the schema.
 var dataSourceTargets = []struct {
 	target
 	constructor func() datasource.DataSource
@@ -310,6 +315,7 @@ resource "nile_database" "claimed" {
 	"data-sources/developer": `data "nile_developer" "example" {}`,
 }
 
+// main runs the generator and exits non-zero on failure.
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "gendocs:", err)
@@ -317,6 +323,8 @@ func main() {
 	}
 }
 
+// run renders and writes the docs page of every registered resource and
+// data source, reporting the first failure.
 func run() error {
 	ctx := context.Background()
 	for _, t := range resourceTargets {
@@ -351,6 +359,8 @@ func run() error {
 	return nil
 }
 
+// writeDoc writes one docs page with Terraform Registry front matter
+// around body, creating the target directory if needed.
 func writeDoc(path, typeName, subcategory, body string) error {
 	content := fmt.Sprintf("---\npage_title: \"Nile: %s\"\nsubcategory: \"%s\"\n---\n\n%s\n", typeName, subcategory, body)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -529,10 +539,13 @@ func convertNested[A attribute](in map[string]A) map[string]attribute {
 	return out
 }
 
+// shortName strips the provider's `nile_` prefix from a Terraform type name,
+// yielding the key used in the examples and notes maps.
 func shortName(typeName string) string {
 	return strings.TrimPrefix(typeName, "nile_")
 }
 
+// wrapDescription reflows description to at most 96 columns per line.
 func wrapDescription(description string) string {
 	const maxWidth = 96
 	words := strings.Fields(description)

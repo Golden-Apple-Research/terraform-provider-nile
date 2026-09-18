@@ -23,23 +23,41 @@ func NewDatabaseDataSource() datasource.DataSource {
 	return newReadOnlyDataSource("nile_database", databaseDataSourceSchema, readDatabase)
 }
 
+// databaseDataSourceModel holds the Terraform state of the nile_database
+// data source for a single database.
 type databaseDataSourceModel struct {
+	// WorkspaceSlug is the workspace that owns the database.
 	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
-	Name          types.String `tfsdk:"name"`
+	// Name is the name of the database to look up.
+	Name types.String `tfsdk:"name"`
 	// The data source ID is the database's server-side identifier.
-	ID         types.String `tfsdk:"id"`
-	Status     types.String `tfsdk:"status"`
-	Region     types.String `tfsdk:"region"`
-	APIHost    types.String `tfsdk:"api_host"`
-	DBHost     types.String `tfsdk:"db_host"`
-	Expandable types.Bool   `tfsdk:"expandable"`
-	Created    types.String `tfsdk:"created"`
-	Deleted    types.String `tfsdk:"deleted"`
-	ParentID   types.String `tfsdk:"parent_id"`
+	ID types.String `tfsdk:"id"`
+	// Status is the database lifecycle status (for example READY).
+	Status types.String `tfsdk:"status"`
+	// Region is the region identifier the database runs in.
+	Region types.String `tfsdk:"region"`
+	// APIHost is the API endpoint host of the database.
+	APIHost types.String `tfsdk:"api_host"`
+	// DBHost is the SQL connection host of the database.
+	DBHost types.String `tfsdk:"db_host"`
+	// Expandable reports whether the API marks the database as expandable.
+	Expandable types.Bool `tfsdk:"expandable"`
+	// Created is the creation timestamp of the database.
+	Created types.String `tfsdk:"created"`
+	// Deleted is the deletion timestamp, empty while the database exists.
+	Deleted types.String `tfsdk:"deleted"`
+	// ParentID is the identifier of the parent (primary) database; set for
+	// read replicas only.
+	ParentID types.String `tfsdk:"parent_id"`
+	// ParentName is the name of the parent (primary) database; set for read
+	// replicas only.
 	ParentName types.String `tfsdk:"parent_name"`
-	Raw        types.String `tfsdk:"raw_json"`
+	// Raw is the redacted raw JSON payload returned by the API.
+	Raw types.String `tfsdk:"raw_json"`
 }
 
+// databaseDataSourceSchema builds the schema of the nile_database data
+// source on top of the shared database attributes.
 func databaseDataSourceSchema(_ context.Context) schema.Schema {
 	attrs := databaseAttributes()
 	attrs["workspace_slug"] = schema.StringAttribute{
@@ -63,6 +81,9 @@ func databaseDataSourceSchema(_ context.Context) schema.Schema {
 	}
 }
 
+// readDatabase fetches a single database via
+// GET /workspaces/{workspaceSlug}/databases/{databaseName} and fills the
+// data source model from the response.
 func readDatabase(ctx context.Context, client *nileapi.Client, data *databaseDataSourceModel, resp *datasource.ReadResponse) {
 	workspaceSlug := data.WorkspaceSlug.ValueString()
 	name := data.Name.ValueString()
@@ -79,6 +100,8 @@ func readDatabase(ctx context.Context, client *nileapi.Client, data *databaseDat
 	applyDatabaseDataSource(data, db)
 }
 
+// applyDatabaseDataSource copies an API database into the data source model
+// via databaseModelFromAPI.
 func applyDatabaseDataSource(data *databaseDataSourceModel, db nileapi.Database) {
 	m := databaseModelFromAPI(db)
 	data.ID = m.ID
@@ -102,12 +125,19 @@ func NewDatabasesDataSource() datasource.DataSource {
 	return newReadOnlyDataSource("nile_databases", databasesDataSourceSchema, readDatabases)
 }
 
+// databasesDataSourceModel holds the Terraform state of the nile_databases
+// data source listing the databases of a workspace.
 type databasesDataSourceModel struct {
-	WorkspaceSlug types.String    `tfsdk:"workspace_slug"`
-	ID            types.String    `tfsdk:"id"`
-	Databases     []databaseModel `tfsdk:"databases"`
+	// WorkspaceSlug is the workspace whose databases are listed.
+	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
+	// ID is the stable data source identifier (the workspace slug).
+	ID types.String `tfsdk:"id"`
+	// Databases are the databases found in the workspace.
+	Databases []databaseModel `tfsdk:"databases"`
 }
 
+// databasesDataSourceSchema builds the schema of the nile_databases data
+// source.
 func databasesDataSourceSchema(_ context.Context) schema.Schema {
 	return schema.Schema{
 		MarkdownDescription: "Lists all Nile databases in a workspace via " +
@@ -133,6 +163,8 @@ func databasesDataSourceSchema(_ context.Context) schema.Schema {
 	}
 }
 
+// readDatabases lists all databases of a workspace via
+// GET /workspaces/{workspaceSlug}/databases.
 func readDatabases(ctx context.Context, client *nileapi.Client, data *databasesDataSourceModel, resp *datasource.ReadResponse) {
 	workspaceSlug := data.WorkspaceSlug.ValueString()
 

@@ -21,6 +21,8 @@ import (
 	"github.com/Golden-Apple-Research/nile-terraform/internal/nileapi"
 )
 
+// Compile-time assertions that databaseCredentialResource implements the
+// required Terraform Plugin Framework resource interfaces.
 var (
 	_ resource.Resource                = &databaseCredentialResource{}
 	_ resource.ResourceWithConfigure   = &databaseCredentialResource{}
@@ -34,31 +36,51 @@ func NewDatabaseCredentialResource() resource.Resource {
 	return &databaseCredentialResource{}
 }
 
+// databaseCredentialResource implements the nile_database_credential
+// resource, which manages credentials of a Nile database, including rotation.
 type databaseCredentialResource struct {
+	// client is the Nile API client shared by all provider resources.
 	client *nileapi.Client
 }
 
+// databaseCredentialResourceModel is the Terraform state model of the
+// nile_database_credential resource.
 type databaseCredentialResourceModel struct {
+	// WorkspaceSlug is the slug of the workspace that owns the database.
 	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
-	DatabaseName  types.String `tfsdk:"database_name"`
-	TenantID      types.String `tfsdk:"tenant_id"`
-	Internal      types.Bool   `tfsdk:"internal"`
-	ID            types.String `tfsdk:"id"`
-	Password      types.String `tfsdk:"password"`
-	APIHost       types.String `tfsdk:"api_host"`
-	DBHost        types.String `tfsdk:"db_host"`
-	Created       types.String `tfsdk:"created"`
-	Raw           types.String `tfsdk:"raw_json"`
+	// DatabaseName is the name of the database the credential belongs to.
+	DatabaseName types.String `tfsdk:"database_name"`
+	// TenantID is the tenant the credential is scoped to.
+	TenantID types.String `tfsdk:"tenant_id"`
+	// Internal reports whether this is an internal credential.
+	Internal types.Bool `tfsdk:"internal"`
+	// ID is the credential identifier.
+	ID types.String `tfsdk:"id"`
+	// Password is the one-time credential password; the API returns it only at creation.
+	Password types.String `tfsdk:"password"`
+	// APIHost is the host of the database's API endpoint.
+	APIHost types.String `tfsdk:"api_host"`
+	// DBHost is the host of the database's PostgreSQL endpoint, if provisioned.
+	DBHost types.String `tfsdk:"db_host"`
+	// Created is the creation timestamp.
+	Created types.String `tfsdk:"created"`
+	// Raw is the redacted JSON payload of the credential as returned by the API.
+	Raw types.String `tfsdk:"raw_json"`
 
-	RotationTrigger    types.String `tfsdk:"rotation_trigger"`
-	RotationDelayHours types.Int64  `tfsdk:"rotation_delay_hours"`
-	RotationReason     types.String `tfsdk:"rotation_reason"`
+	// RotationTrigger is an arbitrary value whose change rotates the credential in place.
+	RotationTrigger types.String `tfsdk:"rotation_trigger"`
+	// RotationDelayHours keeps old secrets valid this many extra hours during rotation.
+	RotationDelayHours types.Int64 `tfsdk:"rotation_delay_hours"`
+	// RotationReason is an optional reason recorded with the rotation.
+	RotationReason types.String `tfsdk:"rotation_reason"`
 }
 
+// Metadata sets the Terraform resource type name.
 func (r *databaseCredentialResource) Metadata(_ context.Context, _ resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = "nile_database_credential"
 }
 
+// Schema defines the attributes of the nile_database_credential resource.
 func (r *databaseCredentialResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages a credential of a Nile database via " +
@@ -159,6 +181,7 @@ func (r *databaseCredentialResource) Schema(_ context.Context, _ resource.Schema
 	}
 }
 
+// Configure stores the provider's shared Nile API client on the resource.
 func (r *databaseCredentialResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
@@ -199,6 +222,8 @@ func (r *databaseCredentialResource) ModifyPlan(ctx context.Context, req resourc
 	}
 }
 
+// Create provisions a database credential and stores its one-time password in
+// state, flagging a missing password without orphaning the credential.
 func (r *databaseCredentialResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan databaseCredentialResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -251,6 +276,8 @@ func (r *databaseCredentialResource) Create(ctx context.Context, req resource.Cr
 	}
 }
 
+// Read refreshes the credential by looking it up in the database's credential
+// list; a credential that no longer exists is removed from state.
 func (r *databaseCredentialResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state databaseCredentialResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -296,6 +323,8 @@ func (r *databaseCredentialResource) Read(ctx context.Context, req resource.Read
 	resp.State.RemoveResource(ctx)
 }
 
+// Update rotates the credential in place when rotation_trigger changed; the
+// identity attributes force replacement instead.
 func (r *databaseCredentialResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	// The identity attributes (workspace, database, tenant, internal) force
 	// replacement; Update therefore only implements in-place rotation,
@@ -350,6 +379,8 @@ func (r *databaseCredentialResource) Update(ctx context.Context, req resource.Up
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
+// Delete removes the database credential via the API; an already deleted
+// credential is treated as success.
 func (r *databaseCredentialResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state databaseCredentialResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -378,6 +409,8 @@ func (r *databaseCredentialResource) Delete(ctx context.Context, req resource.De
 	resp.State.RemoveResource(ctx)
 }
 
+// ImportState imports a credential from its
+// `workspace_slug/database_name/credential_id` identifier.
 func (r *databaseCredentialResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	parts, err := splitResourceID(req.ID, 3)
 	if err != nil {

@@ -1,0 +1,3364 @@
+{
+  "openapi" : "3.0.1",
+  "info" : {
+    "title" : "Nile ReST API",
+    "description" : "Making SaaS chill.",
+    "contact" : {
+      "email" : "support@thenile.dev"
+    },
+    "version" : "0.1.0-74222e6"
+  },
+  "servers" : [ {
+    "url" : "https://global.thenile.dev"
+  } ],
+  "paths" : {
+    "/workspaces/{workspaceSlug}/databases/{databaseName}/compute" : {
+      "get" : {
+        "tags" : [ "databases", "compute" ],
+        "summary" : "List dedicated compute instances for a database",
+        "operationId" : "listComputeForDatabase",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "databaseName",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "start",
+          "in" : "query",
+          "schema" : {
+            "type" : "string",
+            "description" : "The start of a time window to search for active instances",
+            "format" : "date-time"
+          }
+        }, {
+          "name" : "end",
+          "in" : "query",
+          "schema" : {
+            "type" : "string",
+            "description" : "The end of a time window to search for active instances",
+            "format" : "date-time"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Instance list retrieved.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/DedicatedComputeInstance"
+                  }
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Forbidden. The credentials provided do not grant access to the requested resource(s).",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      },
+      "post" : {
+        "tags" : [ "databases", "compute" ],
+        "summary" : "Create a dedicated compute instance",
+        "operationId" : "createComputeInstance",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "databaseName",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "*/*" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateComputeInstanceRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Instance created.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DedicatedComputeInstance"
+                }
+              }
+            }
+          },
+          "202" : {
+            "description" : "Instance creation pending; poll for progress.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DedicatedComputeInstance"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Forbidden. The credentials provided do not grant access to the requested resource(s).",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/databases/{databaseName}/compute/{instanceId}" : {
+      "get" : {
+        "tags" : [ "databases", "compute" ],
+        "summary" : "Describe a dedicated compute instance",
+        "operationId" : "describeComputeInstance",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "databaseName",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "instanceId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Dedicated compute instance details",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/DedicatedComputeInstance"
+                  }
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Forbidden. The credentials provided do not grant access to the requested resource(s).",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Instance not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      },
+      "put" : {
+        "tags" : [ "databases", "compute" ],
+        "summary" : "Update a dedicated compute instance",
+        "description" : "Rename and/or resize a dedicated compute instance.\n",
+        "operationId" : "updateComputeInstance",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "databaseName",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "instanceId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "*/*" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateComputeInstanceRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Instance updated",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/GetDatabaseResponse"
+                }
+              }
+            }
+          },
+          "202" : {
+            "description" : "Instance update pending; poll for progress.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/GetDatabaseResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Forbidden. The credentials provided do not grant access to the requested resource(s).",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Instance not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      },
+      "delete" : {
+        "tags" : [ "databases", "compute" ],
+        "summary" : "Delete a dedicated compute instance",
+        "description" : "Removes a compute instance from your database and queues it for deletion. The\ninstance will no longer appear in your Nile dashboard. When deletion is\nfinalized, all data associated with the instance will be deleted.\n",
+        "operationId" : "deleteComputeInstance",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "databaseName",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "instanceId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Instance deleted",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/GetDatabaseResponse"
+                }
+              }
+            }
+          },
+          "202" : {
+            "description" : "Instance deletion pending; poll for progress.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/GetDatabaseResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Forbidden. The credentials provided do not grant access to the requested resource(s).",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Instance not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/databases/{databaseName}/credentials" : {
+      "get" : {
+        "tags" : [ "databases", "authentication", "credentials" ],
+        "summary" : "Lists credentials for a database",
+        "description" : "Lists all credentials that exist for a database. The id of the credential is\nincluded in the response, but not the password. Passwords are provided only once,\nat the time the credential is created, and are encrypted for storage.\n",
+        "operationId" : "listCredentials",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "databaseName",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "tenantId",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "internal",
+          "in" : "query",
+          "schema" : {
+            "type" : "boolean",
+            "default" : false
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "A list of Credential objects",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/Credential"
+                  }
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Forbidden. The credentials provided do not grant access to the requested resource(s).",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      },
+      "post" : {
+        "tags" : [ "databases", "authentication", "credentials" ],
+        "summary" : "Create a database credential",
+        "description" : "Generates a new secure credential for a database. The generated password is\nreturned in the response, and is the only time the password is available in\nplaintext. No request body is required.\"\n",
+        "operationId" : "createCredential",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "databaseName",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "tenantId",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "internal",
+          "in" : "query",
+          "schema" : {
+            "type" : "boolean",
+            "default" : false
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Credential created",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CreateCredentialResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Forbidden. The credentials provided do not grant access to the requested resource(s).",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/databases/{databaseName}/credentials/{credentialId}" : {
+      "delete" : {
+        "tags" : [ "databases", "authentication", "credentials" ],
+        "summary" : "Delete a database credential",
+        "description" : "Deletes an existing database credential. No request body is required.\"\n",
+        "operationId" : "deleteCredential",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "databaseName",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "credentialId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "Credential deleted"
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Forbidden. The credentials provided do not grant access to the requested resource(s).",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/databases/{databaseName}/credentials/rotate" : {
+      "post" : {
+        "tags" : [ "databases", "authentication", "credentials" ],
+        "summary" : "Rotate a database credential",
+        "description" : "Generates a new credential and schedules existing credentials for deletion after the provided delay.\n",
+        "operationId" : "rotateCredential",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "databaseName",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "tenantId",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "internal",
+          "in" : "query",
+          "schema" : {
+            "type" : "boolean",
+            "default" : false
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "*/*" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RotateCredentialRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "default" : {
+            "description" : "default response",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/databases/claim" : {
+      "post" : {
+        "tags" : [ "databases" ],
+        "summary" : "Claim a database provisioned without auth",
+        "description" : "Moves the database into the selected workspace if claim code is valid.",
+        "operationId" : "claimDatabase",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ClaimDatabaseRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Database claimed.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/GetDatabaseResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "The database is not compatible with the workspace.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Claim code is invalid or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/databases/{databaseId}/insights/errors" : {
+      "get" : {
+        "tags" : [ "databases" ],
+        "summary" : "List database error metrics",
+        "description" : "Lists bucketed SQL and connection error counts reported by Thoth and Nile Proxy.",
+        "operationId" : "listDatabaseErrorInsights",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "databaseId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "start",
+          "in" : "query",
+          "schema" : {
+            "type" : "string",
+            "description" : "Minute-aligned start of the metric window.",
+            "format" : "date-time"
+          }
+        }, {
+          "name" : "end",
+          "in" : "query",
+          "schema" : {
+            "type" : "string",
+            "description" : "Minute-aligned end of the metric window.",
+            "format" : "date-time"
+          }
+        }, {
+          "name" : "granularity",
+          "in" : "query",
+          "schema" : {
+            "type" : "string",
+            "description" : "Bucket granularity: 1m, 5m, 1h, or 1d."
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Database error metrics.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DatabaseErrorsResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Invalid time range or granularity.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Database not found in the workspace.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "502" : {
+            "description" : "Regional metadata or Tinybird telemetry is unavailable.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "503" : {
+            "description" : "Tinybird telemetry is not configured.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/databases/{databaseId}/insights/query-performance" : {
+      "get" : {
+        "tags" : [ "databases" ],
+        "summary" : "List database query performance metrics",
+        "description" : "Lists separately sourced Proxy query rate, Thoth observed query rate, and Thoth P99 query latency for a database.",
+        "operationId" : "listDatabaseQueryPerformanceInsights",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "databaseId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "start",
+          "in" : "query",
+          "schema" : {
+            "type" : "string",
+            "description" : "Minute-aligned start of the metric window.",
+            "format" : "date-time"
+          }
+        }, {
+          "name" : "end",
+          "in" : "query",
+          "schema" : {
+            "type" : "string",
+            "description" : "Minute-aligned end of the metric window.",
+            "format" : "date-time"
+          }
+        }, {
+          "name" : "granularity",
+          "in" : "query",
+          "schema" : {
+            "type" : "string",
+            "description" : "Bucket granularity: 1m, 5m, 1h, or 1d."
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Database query performance metrics.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DatabaseQueryPerformanceResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Invalid time range or granularity.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Database not found in the workspace.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "502" : {
+            "description" : "Regional metadata or Tinybird telemetry is unavailable.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "503" : {
+            "description" : "Tinybird telemetry is not configured.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/databases" : {
+      "get" : {
+        "tags" : [ "databases" ],
+        "summary" : "List databases",
+        "description" : "Lists all of the databases in a workspace.\n",
+        "operationId" : "listDatabases",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "A list of GetDatabaseResponse objects.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/GetDatabaseResponse"
+                  }
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Forbidden. The credentials provided do not grant access to the requested resource(s).",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Workspace not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      },
+      "post" : {
+        "tags" : [ "databases" ],
+        "summary" : "Create a database",
+        "description" : "Creates a database record in the control plane and triggers creation in the\ntarget region. Database names must be less than 64 characters, and unique\nwithin a workspace. Names may contain letters (lower or uppercase), numbers,\nand underscores, and must begin with a letter or underscore.\n",
+        "operationId" : "createDatabase",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "The name and region for the new database",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateDatabaseRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Database created.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/GetDatabaseResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "An invalid database name or region was provided.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Forbidden. The credentials provided do not grant access to the requested resource(s).",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The workspace does not exist or is not authorized for the authenticated user.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "A database with the provided name already exists.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/databases/{databaseName}" : {
+      "get" : {
+        "tags" : [ "databases" ],
+        "summary" : "Get a database",
+        "description" : "Gets details of a database.\n",
+        "operationId" : "getDatabase",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "databaseName",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Database details",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/GetDatabaseResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Forbidden. The credentials provided do not grant access to the requested resource(s).",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "No database with that name exists.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      },
+      "put" : {
+        "tags" : [ "databases" ],
+        "summary" : "Rename a database",
+        "description" : "Renames a database in a workspace.\n",
+        "operationId" : "renameDatabase",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "databaseName",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "The new name for the database.",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateDatabaseRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Database renamed",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/GetDatabaseResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "An invalid database name was provided.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Forbidden. The credentials provided do not grant access to the requested resource(s).",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Database not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "A database with the provided name already exists.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      },
+      "delete" : {
+        "tags" : [ "databases" ],
+        "summary" : "Delete a database",
+        "description" : "Marks a database as deleted and queues its data for deletion. The database will\nno longer appear in your Nile dashboard. You will be able to connect to it and\noperate on it while it is queued for deletion, but compute costs still apply.\n",
+        "operationId" : "deleteDatabase",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "databaseName",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Database deleted",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/GetDatabaseResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Forbidden. The credentials provided do not grant access to the requested resource(s).",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Database not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/databases/{databaseId}/insights/uptime" : {
+      "get" : {
+        "tags" : [ "databases" ],
+        "summary" : "List database uptime metrics",
+        "description" : "Lists time-weighted database uptime derived from PostgreSQL ready-probe samples.",
+        "operationId" : "listDatabaseUptimeInsights",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "databaseId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "start",
+          "in" : "query",
+          "schema" : {
+            "type" : "string",
+            "description" : "Minute-aligned start of the metric window.",
+            "format" : "date-time"
+          }
+        }, {
+          "name" : "end",
+          "in" : "query",
+          "schema" : {
+            "type" : "string",
+            "description" : "Minute-aligned end of the metric window.",
+            "format" : "date-time"
+          }
+        }, {
+          "name" : "granularity",
+          "in" : "query",
+          "schema" : {
+            "type" : "string",
+            "description" : "Bucket granularity: 1m, 5m, 1h, or 1d."
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Database uptime metrics.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DatabaseUptimeResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Invalid time range or granularity.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Database not found in the workspace.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "502" : {
+            "description" : "Regional metadata or Tinybird telemetry is unavailable.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "503" : {
+            "description" : "Tinybird telemetry is not configured.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/databases/provision" : {
+      "post" : {
+        "tags" : [ "databases" ],
+        "summary" : "Provision a database without authentication",
+        "description" : "Creates a database and returns connection details plus a 24h claim code.",
+        "operationId" : "provisionDatabaseUnauthenticated",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UnauthenticatedProvisionDatabaseRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "default" : {
+            "description" : "default response",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/workspaces/{workspaceSlug}/invites" : {
+      "get" : {
+        "tags" : [ "developers", "workspaces" ],
+        "summary" : "List developer invites",
+        "description" : "Lists all developer invites in a workspace",
+        "operationId" : "listDeveloperInvites",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "verificationState",
+          "in" : "query",
+          "schema" : {
+            "$ref" : "#/components/schemas/EmailVerificationStateFilter"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "List of invites",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/DeveloperInvite"
+                  }
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Forbidden. The credentials provided do not grant access to the requested resource(s).",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      },
+      "post" : {
+        "tags" : [ "developers", "workspaces" ],
+        "summary" : "Invite a developer to a workspace",
+        "description" : "Sends an email to another developer with a link that allows them to join the\nworkspace.\n",
+        "operationId" : "createDeveloperInvite",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Contact information for the invitee",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateInviteRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Invite created successfully. An email will be sent.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "anyOf" : [ {
+                    "$ref" : "#/components/schemas/DeveloperInvite"
+                  }, {
+                    "$ref" : "#/components/schemas/DeveloperInviteWithCode"
+                  } ]
+                }
+              }
+            }
+          },
+          "202" : {
+            "description" : "The invite is pending email delivery.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Forbidden. The credentials provided do not grant access to the requested resource(s).",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/invites/{inviteId}" : {
+      "delete" : {
+        "tags" : [ "developers", "workspaces" ],
+        "summary" : "Deletes a previously issued invite",
+        "operationId" : "deleteDeveloperInvite",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "inviteId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "Invite deleted"
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Forbidden. The credentials provided do not grant access to the requested resource(s).",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Invite not found.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/developers/me" : {
+      "get" : {
+        "tags" : [ "developers" ],
+        "summary" : "Identify developer details",
+        "description" : "Returns information about the developer associated with the token provided,\nincluding the workspaces and database ids the developer is authorized to access,\nand the email address associated with the developer.\n",
+        "operationId" : "identifyDeveloper",
+        "responses" : {
+          "200" : {
+            "description" : "Developer found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Developer"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Forbidden. The credentials provided do not grant access to the requested resource(s).",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Developer not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/regions" : {
+      "get" : {
+        "tags" : [ "databases" ],
+        "summary" : "List available regions",
+        "description" : "Retrieve the list of available region identifiers for a workspace.\nIdentifiers are composed of a prefix indicating the underlying cloud provider\nfollowed by a region name in that provider. For example `AWS_US_WEST_2` is\nassociated with the `us-west-2` region (Portland, OR) of AWS.\n",
+        "operationId" : "listRegions",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Available regions",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "type" : "string",
+                    "enum" : [ "AWS_US_WEST_2", "AWS_EU_CENTRAL_1", "AZURE_EASTUS" ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/metrics/compute" : {
+      "get" : {
+        "tags" : [ "workspaces" ],
+        "description" : "List dedicated compute metrics for a workspace.",
+        "operationId" : "listWorkspaceComputeMetrics",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "start",
+          "in" : "query",
+          "schema" : {
+            "type" : "string",
+            "description" : "The start of a time window",
+            "format" : "date-time"
+          }
+        }, {
+          "name" : "end",
+          "in" : "query",
+          "schema" : {
+            "type" : "string",
+            "description" : "The end of a time window",
+            "format" : "date-time"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "A list of compute metrics for the databases in the workspace.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/WorkspaceComputeUsage"
+                  }
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Workspace not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces" : {
+      "get" : {
+        "tags" : [ "workspaces" ],
+        "summary" : "List workspaces",
+        "description" : "Lists all workspaces that an authenticated developer is authorized to use.\n",
+        "operationId" : "listWorkspaces",
+        "responses" : {
+          "200" : {
+            "description" : "List of workspaces",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/Workspace"
+                  }
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      },
+      "post" : {
+        "tags" : [ "workspaces" ],
+        "summary" : "Create a workspace",
+        "description" : "Creates a workspace for the authenticated developer. A workspace slug is\ngenerated from the workspace name and used as the workspace identifier.\nWorkspace slugs must be globally unique.\nGenerated slugs will only include ASCII characters. Spaces and non-ASCII\ncharacters are replaced with hyphens.\n",
+        "operationId" : "createWorkspace",
+        "requestBody" : {
+          "description" : "The name of the new workspace",
+          "content" : {
+            "*/*" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateWorkspaceRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created workspace",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Workspace"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Workspace with the same name already exists",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}" : {
+      "get" : {
+        "tags" : [ "workspaces" ],
+        "description" : "Get details about a specific workspace.",
+        "operationId" : "getWorkspace",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Details about the named workspace.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/Workspace"
+                  }
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Workspace not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/compute-types" : {
+      "get" : {
+        "tags" : [ "workspaces" ],
+        "description" : "List dedicated compute types available for a workspace.",
+        "operationId" : "listComputeTypes",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "A list of all available instance types.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/ComputeInstanceType"
+                  }
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Workspace not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "500" : {
+            "description" : "Compute types failed to load",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/developers" : {
+      "get" : {
+        "tags" : [ "workspaces", "developers" ],
+        "summary" : "List developers with access to a workspace",
+        "description" : "List details about the developers authorized to access the workspace.\n",
+        "operationId" : "listWorkspaceDevelopers",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "A list of Developer objects.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/Developer"
+                  }
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Forbidden. The credentials provided do not grant access to the requested resource(s).",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Workspace not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/developers/{developerId}" : {
+      "delete" : {
+        "tags" : [ "workspaces", "developers" ],
+        "summary" : "Remove a developer from a workspace",
+        "description" : "Removes a developer from the workspace.\n",
+        "operationId" : "removeDeveloper",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "developerId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "Developer removed",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized. Credentials were missing or expired.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Forbidden. The credentials provided do not grant access to the requested resource(s).",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Workspace or developer not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/subscription" : {
+      "get" : {
+        "tags" : [ "workspaces" ],
+        "summary" : "Get current subscription (from DB)",
+        "description" : "Get details of the current subscription for the given workspace.\n",
+        "operationId" : "getWorkspaceCurrentSubscription",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "A subscription record",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/WorkspaceSubscriptionDto"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "No active subscription",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      },
+      "put" : {
+        "tags" : [ "workspaces" ],
+        "summary" : "Change level (effective now or at timestamp)",
+        "operationId" : "change",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "*/*" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/WorkspaceSubscriptionRequest"
+              },
+              "example" : {
+                "level" : "PRO"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "default" : {
+            "description" : "default response",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      },
+      "post" : {
+        "tags" : [ "workspaces" ],
+        "summary" : "Start a subscription row",
+        "operationId" : "start",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "*/*" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/WorkspaceSubscriptionRequest"
+              },
+              "example" : {
+                "level" : "FREE"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "default" : {
+            "description" : "default response",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/subscription/{subscriptionId}" : {
+      "delete" : {
+        "tags" : [ "workspaces" ],
+        "summary" : "Close a subscription row at given time (now if omitted)",
+        "operationId" : "close",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "subscriptionId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "default" : {
+            "description" : "default response",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/billing/customer" : {
+      "put" : {
+        "tags" : [ "workspaces" ],
+        "summary" : "Ensure workspace billing customer",
+        "description" : "Find or create the Stripe customer linked to this workspace and return\ncustomer-level payment metadata.\n",
+        "operationId" : "ensureWorkspaceBillingCustomer",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Workspace billing customer",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/WorkspaceBillingCustomerDto"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "API-key callers cannot ensure billing customers",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Workspace not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "502" : {
+            "description" : "Customer lookup failed",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/billing/readiness" : {
+      "get" : {
+        "tags" : [ "workspaces" ],
+        "summary" : "Get workspace billing readiness",
+        "description" : "Resolve the workspace billing customer without creating one and return\nlocal readiness semantics for customer and default payment-method state.\n",
+        "operationId" : "getWorkspaceBillingReadiness",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Workspace billing readiness",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/WorkspaceBillingReadinessDto"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "API-key callers cannot read billing readiness",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Workspace not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/APIError"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/subscription/history" : {
+      "get" : {
+        "tags" : [ "workspaces" ],
+        "summary" : "List subscription history (most-recent first)",
+        "description" : "List all subscription records for the given workspace, most-recent first.\n",
+        "operationId" : "getWorkspaceSubscriptionHistory",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "default" : {
+            "description" : "default response",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/WorkspaceSubscriptionDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/workspaces/{workspaceSlug}/billing/{ym}/totals" : {
+      "get" : {
+        "tags" : [ "workspaces" ],
+        "summary" : "Monthly totals by component, from rated lines",
+        "operationId" : "totals",
+        "parameters" : [ {
+          "name" : "workspaceSlug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "ym",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "*/*" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Developer"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "default" : {
+            "description" : "default response",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/WorkspaceMonthlyTotalsDto"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "jwtBearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/oauth2/token" : {
+      "post" : {
+        "operationId" : "getToken",
+        "parameters" : [ {
+          "name" : "Authorization",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/x-www-form-urlencoded" : {
+              "schema" : {
+                "type" : "object",
+                "properties" : {
+                  "grant_type" : {
+                    "type" : "string"
+                  },
+                  "code" : {
+                    "type" : "string"
+                  },
+                  "code_verifier" : {
+                    "type" : "string"
+                  },
+                  "redirect_uri" : {
+                    "type" : "string"
+                  },
+                  "client_id" : {
+                    "type" : "string"
+                  },
+                  "client_secret" : {
+                    "type" : "string"
+                  },
+                  "refresh_token" : {
+                    "type" : "string"
+                  },
+                  "scope" : {
+                    "type" : "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses" : {
+          "default" : {
+            "description" : "default response",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "ComputeInstanceType" : {
+        "required" : [ "computeSize", "hourlyCost", "id", "memory" ],
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "computeSize" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "memory" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "hourlyCost" : {
+            "type" : "number"
+          }
+        }
+      },
+      "DatabaseParentResponse" : {
+        "required" : [ "id", "name" ],
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "name" : {
+            "minLength" : 1,
+            "type" : "string"
+          }
+        }
+      },
+      "DedicatedComputeInstance" : {
+        "required" : [ "desiredInstanceType", "instanceId", "instanceName", "instanceType", "status" ],
+        "type" : "object",
+        "properties" : {
+          "instanceId" : {
+            "type" : "string"
+          },
+          "workspace" : {
+            "$ref" : "#/components/schemas/Workspace"
+          },
+          "database" : {
+            "$ref" : "#/components/schemas/GetDatabaseResponse"
+          },
+          "region" : {
+            "type" : "string",
+            "enum" : [ "AWS_US_WEST_2", "AWS_EU_CENTRAL_1", "AZURE_EASTUS" ]
+          },
+          "instanceName" : {
+            "type" : "string"
+          },
+          "instanceType" : {
+            "$ref" : "#/components/schemas/ComputeInstanceType"
+          },
+          "desiredInstanceType" : {
+            "$ref" : "#/components/schemas/ComputeInstanceType"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "PENDING", "PROVISIONING", "READY", "RESIZING", "DELETING", "FAILED", "TERMINATED" ]
+          },
+          "created" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "updated" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "deleted" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "GetDatabaseResponse" : {
+        "required" : [ "apiHost", "expandable", "id", "name", "region", "status", "workspace" ],
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "name" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "workspace" : {
+            "$ref" : "#/components/schemas/Workspace"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "PENDING", "REQUESTED", "BUILT", "POOLED", "READY" ]
+          },
+          "region" : {
+            "type" : "string",
+            "enum" : [ "AWS_US_WEST_2", "AWS_EU_CENTRAL_1", "AZURE_EASTUS" ]
+          },
+          "expandable" : {
+            "type" : "boolean"
+          },
+          "created" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "deleted" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "apiHost" : {
+            "type" : "string",
+            "format" : "uri"
+          },
+          "dbHost" : {
+            "type" : "string",
+            "format" : "uri"
+          },
+          "parent" : {
+            "$ref" : "#/components/schemas/DatabaseParentResponse"
+          }
+        }
+      },
+      "Workspace" : {
+        "required" : [ "name", "slug" ],
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "name" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "slug" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "stripe_customer_id" : {
+            "type" : "string"
+          },
+          "created" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "APIError" : {
+        "required" : [ "errorCode", "message", "statusCode" ],
+        "type" : "object",
+        "properties" : {
+          "errorCode" : {
+            "type" : "string",
+            "enum" : [ "internal_error", "bad_request", "unsupported_operation", "forbidden_operation", "entity_not_found", "duplicate_entity", "invalid_credentials", "unknown_oidc_provider", "unknown_oidc_party", "provider_already_exists", "provider_config_error", "provider_mismatch", "provider_update_error", "provider_disabled", "session_state_missing", "session_state_mismatch", "oidc_code_missing", "tenant_not_found", "constraint_violation", "sql_exception", "db_creation_failure", "db_rename_failure", "db_status_failure", "db_initialization_failure", "db_deletion_failure", "db_config_missing", "unauthorized_workspace_access", "email_send_failure", "jdbc_exception", "oidc_exception", "region_mismatch", "credential_creation_failure", "credential_propagation_failure", "unauthorized_client", "unsupported_response_type", "invalid_request", "server_error", "access_denied", "feature_ineligible", "customer_lookup_failure", "threshold_exceeded", "create_rejected" ]
+          },
+          "message" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "statusCode" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "CreateComputeInstanceRequest" : {
+        "required" : [ "instanceName", "instanceSize" ],
+        "type" : "object",
+        "properties" : {
+          "instanceSize" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "instanceName" : {
+            "maxLength" : 512,
+            "minLength" : 1,
+            "type" : "string"
+          }
+        }
+      },
+      "UpdateComputeInstanceRequest" : {
+        "type" : "object",
+        "properties" : {
+          "instanceSize" : {
+            "type" : "string"
+          },
+          "instanceName" : {
+            "maxLength" : 512,
+            "minLength" : 1,
+            "type" : "string"
+          }
+        }
+      },
+      "CreateCredentialResponse" : {
+        "required" : [ "database", "id", "password" ],
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "database" : {
+            "$ref" : "#/components/schemas/GetDatabaseResponse"
+          },
+          "tenant" : {
+            "type" : "string"
+          },
+          "internal" : {
+            "type" : "boolean"
+          },
+          "password" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "created" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "Credential" : {
+        "required" : [ "database", "id" ],
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "database" : {
+            "$ref" : "#/components/schemas/Database"
+          }
+        }
+      },
+      "Database" : {
+        "required" : [ "id", "name", "regionId", "status", "workspace" ],
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "name" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "workspace" : {
+            "$ref" : "#/components/schemas/Workspace"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "PENDING", "REQUESTED", "BUILT", "POOLED", "READY" ]
+          },
+          "regionId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "created" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "RotateCredentialRequest" : {
+        "type" : "object",
+        "properties" : {
+          "delayOldSecretsExpirationHours" : {
+            "maximum" : 720,
+            "exclusiveMaximum" : false,
+            "minimum" : 0,
+            "exclusiveMinimum" : false,
+            "type" : "number",
+            "format" : "double"
+          },
+          "reason" : {
+            "type" : "string"
+          }
+        }
+      },
+      "ClaimDatabaseRequest" : {
+        "required" : [ "claimCode" ],
+        "type" : "object",
+        "properties" : {
+          "claimCode" : {
+            "minLength" : 1,
+            "type" : "string"
+          }
+        }
+      },
+      "DatabaseErrorPoint" : {
+        "type" : "object",
+        "properties" : {
+          "timestamp" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "source" : {
+            "type" : "string"
+          },
+          "errorCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "DatabaseErrorsResponse" : {
+        "type" : "object",
+        "properties" : {
+          "granularity" : {
+            "type" : "string"
+          },
+          "points" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/DatabaseErrorPoint"
+            }
+          }
+        }
+      },
+      "DatabaseQueryPerformancePoint" : {
+        "type" : "object",
+        "properties" : {
+          "timestamp" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "proxyQueriesPerSecond" : {
+            "type" : "number"
+          },
+          "thothQueriesPerSecond" : {
+            "type" : "number"
+          },
+          "thothP99LatencyMs" : {
+            "type" : "number"
+          },
+          "thothCpuMilliseconds" : {
+            "type" : "number"
+          }
+        }
+      },
+      "DatabaseQueryPerformanceResponse" : {
+        "type" : "object",
+        "properties" : {
+          "source" : {
+            "type" : "string"
+          },
+          "granularity" : {
+            "type" : "string"
+          },
+          "points" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/DatabaseQueryPerformancePoint"
+            }
+          }
+        }
+      },
+      "CreateDatabaseRequest" : {
+        "required" : [ "databaseName", "region" ],
+        "type" : "object",
+        "properties" : {
+          "databaseName" : {
+            "minLength" : 1,
+            "type" : "string",
+            "description" : "The name of the database to be created. Database names must be less than 64\ncharacters, and unique within a workspace. Names may contain letters (lower\nor uppercase), numbers, and underscores, and must begin with a letter or\nunderscore.\n",
+            "example" : "my_spectacular_db"
+          },
+          "region" : {
+            "type" : "string",
+            "description" : "The region where the database will be hosted. Nile currently supports the\nfollowing values:\n- `AWS_US_WEST_2` - AWS in US West (Oregon)\n- `AWS_EU_CENTRAL_1` - AWS in Europe (Frankfurt)\n",
+            "example" : "AWS_US_WEST_2",
+            "enum" : [ "AWS_US_WEST_2", "AWS_EU_CENTRAL_1" ]
+          }
+        },
+        "description" : "Parameters for creating a new database, including the name and region."
+      },
+      "UpdateDatabaseRequest" : {
+        "required" : [ "name" ],
+        "type" : "object",
+        "properties" : {
+          "name" : {
+            "minLength" : 1,
+            "type" : "string",
+            "description" : "The new name of the database. Database names must be less than 64\ncharacters, and unique within a workspace. Names may contain letters\n(lower or uppercase), numbers, and underscores, and must begin with a\nletter or underscore.\n",
+            "example" : "my_spectacular_db"
+          }
+        },
+        "description" : "Parameters for renaming a database."
+      },
+      "DatabaseUptimePoint" : {
+        "type" : "object",
+        "properties" : {
+          "timestamp" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "uptimePercentage" : {
+            "type" : "number"
+          },
+          "uptimeSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "observedSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "DatabaseUptimeResponse" : {
+        "type" : "object",
+        "properties" : {
+          "source" : {
+            "type" : "string"
+          },
+          "scope" : {
+            "type" : "string"
+          },
+          "granularity" : {
+            "type" : "string"
+          },
+          "calculation" : {
+            "type" : "string"
+          },
+          "summary" : {
+            "$ref" : "#/components/schemas/DatabaseUptimeSummary"
+          },
+          "points" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/DatabaseUptimePoint"
+            }
+          }
+        }
+      },
+      "DatabaseUptimeSummary" : {
+        "type" : "object",
+        "properties" : {
+          "uptimePercentage" : {
+            "type" : "number"
+          },
+          "uptimeSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "observedSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "UnauthenticatedProvisionDatabaseRequest" : {
+        "type" : "object",
+        "properties" : {
+          "region" : {
+            "type" : "string",
+            "enum" : [ "AWS_US_WEST_2", "AWS_EU_CENTRAL_1", "AZURE_EASTUS" ]
+          }
+        }
+      },
+      "Developer" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "workspaces" : {
+            "uniqueItems" : true,
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Workspace"
+            }
+          },
+          "databases" : {
+            "uniqueItems" : true,
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "kind" : {
+            "type" : "string",
+            "enum" : [ "HUMAN", "API" ]
+          }
+        }
+      },
+      "DeveloperInvite" : {
+        "required" : [ "email", "id", "sender", "verificationState", "workspace" ],
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "sender" : {
+            "$ref" : "#/components/schemas/Developer"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "workspace" : {
+            "$ref" : "#/components/schemas/Workspace"
+          },
+          "verificationState" : {
+            "type" : "string",
+            "enum" : [ "EMAIL_PENDING", "EMAIL_SENT", "VERIFIED", "EXPIRED" ]
+          },
+          "created" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "updated" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "DeveloperInviteWithCode" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "sender" : {
+            "$ref" : "#/components/schemas/Developer"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "workspace" : {
+            "$ref" : "#/components/schemas/Workspace"
+          },
+          "verificationState" : {
+            "type" : "string",
+            "enum" : [ "EMAIL_PENDING", "EMAIL_SENT", "VERIFIED", "EXPIRED" ]
+          },
+          "created" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "updated" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "code" : {
+            "type" : "string"
+          }
+        },
+        "description" : "An invite for a developer to workspace with invite code"
+      },
+      "CreateInviteRequest" : {
+        "required" : [ "email" ],
+        "type" : "object",
+        "properties" : {
+          "email" : {
+            "minLength" : 1,
+            "type" : "string",
+            "description" : "The invitee's email address",
+            "format" : "email"
+          },
+          "programmatic" : {
+            "type" : "boolean",
+            "description" : "If true, the response will include the invite code."
+          }
+        },
+        "description" : "Parameters for creating an invitation for a developer to join a workspace.\n"
+      },
+      "EmailVerificationStateFilter" : {
+        "type" : "object"
+      },
+      "DatabaseComputeUsage" : {
+        "type" : "object",
+        "properties" : {
+          "usageByInstance" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "$ref" : "#/components/schemas/InstancePeriodComputeUsage"
+            }
+          },
+          "totalVCPUHours" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "start" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "end" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "InstancePeriodComputeUsage" : {
+        "type" : "object",
+        "properties" : {
+          "totalVCPUHours" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "size" : {
+            "type" : "string"
+          },
+          "start" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "end" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "spans" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/InstancePeriodComputeUsage"
+            }
+          }
+        }
+      },
+      "TimeSeriesPoint" : {
+        "type" : "object",
+        "properties" : {
+          "x" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "y" : {
+            "type" : "number",
+            "format" : "double"
+          }
+        }
+      },
+      "UsageChartData" : {
+        "type" : "object",
+        "properties" : {
+          "points" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/TimeSeriesPoint"
+            }
+          },
+          "maxCPUCount" : {
+            "type" : "number",
+            "format" : "double"
+          }
+        }
+      },
+      "WorkspaceComputeUsage" : {
+        "type" : "object",
+        "properties" : {
+          "usageByDatabase" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "$ref" : "#/components/schemas/DatabaseComputeUsage"
+            }
+          },
+          "chartData" : {
+            "$ref" : "#/components/schemas/UsageChartData"
+          },
+          "totalVCPUHours" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "start" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "end" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "CreateWorkspaceRequest" : {
+        "required" : [ "name" ],
+        "type" : "object",
+        "properties" : {
+          "name" : {
+            "minLength" : 1,
+            "type" : "string",
+            "description" : "The name of the new workspace."
+          }
+        },
+        "description" : "Parameters for creating a new workspace."
+      },
+      "WorkspaceSubscriptionRequest" : {
+        "required" : [ "level" ],
+        "type" : "object",
+        "properties" : {
+          "level" : {
+            "type" : "string"
+          }
+        }
+      },
+      "WorkspaceBillingCustomerDto" : {
+        "type" : "object",
+        "properties" : {
+          "workspace" : {
+            "type" : "string"
+          },
+          "stripeCustomerId" : {
+            "type" : "string"
+          },
+          "defaultPaymentMethod" : {
+            "type" : "string"
+          }
+        }
+      },
+      "WorkspaceBillingReadinessDto" : {
+        "type" : "object",
+        "properties" : {
+          "workspace" : {
+            "type" : "string"
+          },
+          "workspaceId" : {
+            "type" : "string"
+          },
+          "stripeCustomerId" : {
+            "type" : "string"
+          },
+          "defaultPaymentMethodId" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "ready", "missing_customer", "missing_payment_method", "lookup_failed", "manual_review_required" ]
+          },
+          "checkedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "lastError" : {
+            "type" : "string"
+          },
+          "source" : {
+            "type" : "string"
+          },
+          "detail" : {
+            "type" : "string"
+          }
+        }
+      },
+      "WorkspaceSubscriptionDto" : {
+        "type" : "object",
+        "properties" : {
+          "workspace" : {
+            "type" : "string"
+          },
+          "level" : {
+            "type" : "string"
+          },
+          "validFrom" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "validTo" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "subscriptionId" : {
+            "type" : "string"
+          },
+          "defaultPaymentMethod" : {
+            "type" : "string"
+          }
+        }
+      },
+      "WorkspaceMonthlyTotalsDto" : {
+        "type" : "object",
+        "properties" : {
+          "ym" : {
+            "type" : "string"
+          },
+          "totals" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "type" : "number"
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes" : {
+      "jwtBearerAuth" : {
+        "type" : "http",
+        "scheme" : "bearer",
+        "bearerFormat" : "JWT"
+      }
+    }
+  }
+}

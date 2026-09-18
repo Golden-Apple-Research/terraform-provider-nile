@@ -5,7 +5,8 @@ OUT_DIR := bin
 
 LD_FLAGS := -X main.version=$(VERSION)
 
-.PHONY: build install test fmt vet license-check smoke docs clean
+.PHONY: build install test fmt vet license-check smoke docs clean \
+	api-spec-fetch api-drift-check api-prism smoke-prism api-schemathesis
 
 build:
 	mkdir -p $(OUT_DIR)
@@ -39,6 +40,26 @@ license-check:
 
 smoke:
 	tests/smoke/run.sh
+
+# --- Nile API contract tooling (see tests/api/README.md) --------------------
+
+api-spec-fetch:
+	tests/api/fetch-spec.sh
+
+api-drift-check:
+	tests/api/check-drift.sh
+
+# Stateful mock API with the Prism OpenAPI validation proxy in front of it.
+api-prism:
+	tests/api/run-prism-proxy.sh
+
+# Full smoke test routed through the Prism validation proxy.
+smoke-prism:
+	tests/api/run-prism-proxy.sh --smoke
+
+# Schemathesis contract fuzzing against the stateful mock API.
+api-schemathesis:
+	tests/api/run-schemathesis.sh
 
 clean:
 	rm -rf $(OUT_DIR)

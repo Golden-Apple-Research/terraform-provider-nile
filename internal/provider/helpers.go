@@ -93,6 +93,9 @@ func redactedRawJSON(raw json.RawMessage) types.String {
 	return types.StringValue(string(encoded))
 }
 
+// apiFieldPresent reports whether raw contains the given top-level JSON
+// field. An empty raw payload counts as present so values constructed in
+// code behave like complete API responses.
 func apiFieldPresent(raw json.RawMessage, field string) bool {
 	if len(raw) == 0 {
 		// A manually constructed API value has no presence metadata; treat its
@@ -112,6 +115,8 @@ func apiFieldPresent(raw json.RawMessage, field string) bool {
 // provisioning response.
 var urlCredentialPattern = regexp.MustCompile(`://[^/@:\s]+:[^/@\s]+@`)
 
+// redactJSONSecrets replaces values of sensitive JSON keys and credentials
+// embedded in URL strings with "[REDACTED]", recursively.
 func redactJSONSecrets(value any) {
 	switch value := value.(type) {
 	case map[string]any:
@@ -133,6 +138,9 @@ func redactJSONSecrets(value any) {
 	}
 }
 
+// isSensitiveJSONKey reports whether a JSON key names a secret-like field.
+// Matching is case-insensitive, ignores "_" and "-", and also covers
+// qualified names such as "dbPassword" or "webhookToken".
 func isSensitiveJSONKey(key string) bool {
 	normalized := strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(key))
 	switch normalized {

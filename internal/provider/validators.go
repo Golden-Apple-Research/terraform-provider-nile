@@ -16,6 +16,7 @@ import (
 // reported by `terraform validate`/`plan` before any API call is made.
 type isRFC3339Validator struct{}
 
+// Compile-time assertion that isRFC3339Validator implements validator.String.
 var _ validator.String = isRFC3339Validator{}
 
 // Description returns a human-readable description of the validator.

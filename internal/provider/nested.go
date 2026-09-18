@@ -16,14 +16,22 @@ import (
 
 // --- workspace -------------------------------------------------------------
 
+// workspaceModel is the Terraform representation of a Nile workspace
+// (nileapi.Workspace) shared by the data sources that expose workspaces.
 type workspaceModel struct {
-	ID               types.String `tfsdk:"id"`
-	Name             types.String `tfsdk:"name"`
-	Slug             types.String `tfsdk:"slug"`
+	// ID is the workspace identifier (`id` in the API response).
+	ID types.String `tfsdk:"id"`
+	// Name is the workspace name.
+	Name types.String `tfsdk:"name"`
+	// Slug is the globally unique workspace slug used in API paths.
+	Slug types.String `tfsdk:"slug"`
+	// StripeCustomerID is the Stripe customer linked to the workspace, if any.
 	StripeCustomerID types.String `tfsdk:"stripe_customer_id"`
-	Created          types.String `tfsdk:"created"`
+	// Created is the creation timestamp.
+	Created types.String `tfsdk:"created"`
 }
 
+// workspaceAttributes returns the schema attributes describing a Nile workspace.
 func workspaceAttributes() map[string]schema.Attribute {
 	return map[string]schema.Attribute{
 		"id": schema.StringAttribute{
@@ -49,6 +57,7 @@ func workspaceAttributes() map[string]schema.Attribute {
 	}
 }
 
+// workspaceModelFromAPI maps a Nile API workspace to its Terraform model.
 func workspaceModelFromAPI(w nileapi.Workspace) workspaceModel {
 	return workspaceModel{
 		ID:               stringOrNull(w.ID),
@@ -59,6 +68,7 @@ func workspaceModelFromAPI(w nileapi.Workspace) workspaceModel {
 	}
 }
 
+// workspaceModelsFromAPI maps Nile API workspaces to their Terraform models.
 func workspaceModelsFromAPI(ws []nileapi.Workspace) []workspaceModel {
 	out := make([]workspaceModel, 0, len(ws))
 	for _, w := range ws {
@@ -69,21 +79,36 @@ func workspaceModelsFromAPI(ws []nileapi.Workspace) []workspaceModel {
 
 // --- database --------------------------------------------------------------
 
+// databaseModel is the Terraform representation of a Nile database
+// (nileapi.Database) shared by several data sources and resources.
 type databaseModel struct {
-	ID         types.String `tfsdk:"id"`
-	Name       types.String `tfsdk:"name"`
-	Status     types.String `tfsdk:"status"`
-	Region     types.String `tfsdk:"region"`
-	APIHost    types.String `tfsdk:"api_host"`
-	DBHost     types.String `tfsdk:"db_host"`
-	Expandable types.Bool   `tfsdk:"expandable"`
-	Created    types.String `tfsdk:"created"`
-	Deleted    types.String `tfsdk:"deleted"`
-	ParentID   types.String `tfsdk:"parent_id"`
+	// ID is the database identifier (`id` in the API response).
+	ID types.String `tfsdk:"id"`
+	// Name is the database name.
+	Name types.String `tfsdk:"name"`
+	// Status is the database status (`PENDING`, `REQUESTED`, `BUILT`, `POOLED` or `READY`).
+	Status types.String `tfsdk:"status"`
+	// Region is the region the database runs in.
+	Region types.String `tfsdk:"region"`
+	// APIHost is the host of the database's API endpoint.
+	APIHost types.String `tfsdk:"api_host"`
+	// DBHost is the host of the database's PostgreSQL endpoint, if provisioned.
+	DBHost types.String `tfsdk:"db_host"`
+	// Expandable reports whether the database can be expanded with read replicas.
+	Expandable types.Bool `tfsdk:"expandable"`
+	// Created is the creation timestamp.
+	Created types.String `tfsdk:"created"`
+	// Deleted is the timestamp at which the database was marked for deletion, if any.
+	Deleted types.String `tfsdk:"deleted"`
+	// ParentID is the identifier of the parent (primary) database for read replicas.
+	ParentID types.String `tfsdk:"parent_id"`
+	// ParentName is the name of the parent (primary) database for read replicas.
 	ParentName types.String `tfsdk:"parent_name"`
-	Raw        types.String `tfsdk:"raw_json"`
+	// Raw is the redacted JSON payload of the database as returned by the API.
+	Raw types.String `tfsdk:"raw_json"`
 }
 
+// databaseAttributes returns the schema attributes describing a Nile database.
 func databaseAttributes() map[string]schema.Attribute {
 	return map[string]schema.Attribute{
 		"id": schema.StringAttribute{
@@ -138,6 +163,7 @@ func databaseAttributes() map[string]schema.Attribute {
 	}
 }
 
+// databaseModelFromAPI maps a Nile API database to its Terraform model.
 func databaseModelFromAPI(db nileapi.Database) databaseModel {
 	m := databaseModel{
 		ID:         stringOrNull(db.ID),
@@ -158,6 +184,7 @@ func databaseModelFromAPI(db nileapi.Database) databaseModel {
 	return m
 }
 
+// databaseModelsFromAPI maps Nile API databases to their Terraform models.
 func databaseModelsFromAPI(dbs []nileapi.Database) []databaseModel {
 	out := make([]databaseModel, 0, len(dbs))
 	for _, db := range dbs {
@@ -168,13 +195,20 @@ func databaseModelsFromAPI(dbs []nileapi.Database) []databaseModel {
 
 // --- compute instance type -------------------------------------------------
 
+// computeTypeModel is the Terraform representation of a Nile compute instance
+// type (nileapi.ComputeInstanceType).
 type computeTypeModel struct {
-	ID          types.String  `tfsdk:"id"`
-	ComputeSize types.String  `tfsdk:"compute_size"`
-	Memory      types.String  `tfsdk:"memory"`
-	HourlyCost  types.Float64 `tfsdk:"hourly_cost"`
+	// ID is the compute type identifier.
+	ID types.String `tfsdk:"id"`
+	// ComputeSize is the CPU size of the compute type (`computeSize` in the API response).
+	ComputeSize types.String `tfsdk:"compute_size"`
+	// Memory is the memory of the compute type (for example `8GB`).
+	Memory types.String `tfsdk:"memory"`
+	// HourlyCost is the hourly cost of the compute type in USD.
+	HourlyCost types.Float64 `tfsdk:"hourly_cost"`
 }
 
+// computeTypeAttributes returns the schema attributes describing a compute instance type.
 func computeTypeAttributes() map[string]schema.Attribute {
 	return map[string]schema.Attribute{
 		"id": schema.StringAttribute{
@@ -196,6 +230,7 @@ func computeTypeAttributes() map[string]schema.Attribute {
 	}
 }
 
+// computeTypeModelFromAPI maps a Nile API compute instance type to its Terraform model.
 func computeTypeModelFromAPI(t nileapi.ComputeInstanceType) computeTypeModel {
 	return computeTypeModel{
 		ID:          stringOrNull(t.ID),
@@ -205,6 +240,7 @@ func computeTypeModelFromAPI(t nileapi.ComputeInstanceType) computeTypeModel {
 	}
 }
 
+// computeTypeModelsFromAPI maps Nile API compute instance types to their Terraform models.
 func computeTypeModelsFromAPI(ts []nileapi.ComputeInstanceType) []computeTypeModel {
 	out := make([]computeTypeModel, 0, len(ts))
 	for _, t := range ts {
@@ -215,16 +251,26 @@ func computeTypeModelsFromAPI(ts []nileapi.ComputeInstanceType) []computeTypeMod
 
 // --- credential ------------------------------------------------------------
 
+// credentialModel is the Terraform representation of a Nile database
+// credential (nileapi.Credential).
 type credentialModel struct {
-	ID       types.String `tfsdk:"id"`
-	Tenant   types.String `tfsdk:"tenant"`
-	Internal types.Bool   `tfsdk:"internal"`
-	Created  types.String `tfsdk:"created"`
-	APIHost  types.String `tfsdk:"api_host"`
-	DBHost   types.String `tfsdk:"db_host"`
-	Raw      types.String `tfsdk:"raw_json"`
+	// ID is the credential identifier.
+	ID types.String `tfsdk:"id"`
+	// Tenant is the tenant the credential is scoped to (`tenant` in the API response).
+	Tenant types.String `tfsdk:"tenant"`
+	// Internal reports whether this is an internal credential.
+	Internal types.Bool `tfsdk:"internal"`
+	// Created is the creation timestamp.
+	Created types.String `tfsdk:"created"`
+	// APIHost is the host of the database's API endpoint.
+	APIHost types.String `tfsdk:"api_host"`
+	// DBHost is the host of the database's PostgreSQL endpoint, if provisioned.
+	DBHost types.String `tfsdk:"db_host"`
+	// Raw is the redacted JSON payload of the credential as returned by the API.
+	Raw types.String `tfsdk:"raw_json"`
 }
 
+// credentialAttributes returns the schema attributes describing a database credential.
 func credentialAttributes() map[string]schema.Attribute {
 	return map[string]schema.Attribute{
 		"id": schema.StringAttribute{
@@ -259,6 +305,7 @@ func credentialAttributes() map[string]schema.Attribute {
 	}
 }
 
+// credentialModelFromAPI maps a Nile API credential to its Terraform model.
 func credentialModelFromAPI(c nileapi.Credential) credentialModel {
 	m := credentialModel{
 		ID:       stringOrNull(c.ID),
@@ -274,6 +321,7 @@ func credentialModelFromAPI(c nileapi.Credential) credentialModel {
 	return m
 }
 
+// credentialModelsFromAPI maps Nile API credentials to their Terraform models.
 func credentialModelsFromAPI(cs []nileapi.Credential) []credentialModel {
 	out := make([]credentialModel, 0, len(cs))
 	for _, c := range cs {
@@ -284,16 +332,26 @@ func credentialModelsFromAPI(cs []nileapi.Credential) []credentialModel {
 
 // --- developer invite ------------------------------------------------------
 
+// inviteModel is the Terraform representation of a Nile developer invite
+// (nileapi.DeveloperInvite).
 type inviteModel struct {
-	ID                types.String `tfsdk:"id"`
-	Email             types.String `tfsdk:"email"`
+	// ID is the invite identifier.
+	ID types.String `tfsdk:"id"`
+	// Email is the email address the invite was sent to.
+	Email types.String `tfsdk:"email"`
+	// VerificationState is the verification state (`EMAIL_PENDING`, `EMAIL_SENT`, `VERIFIED` or `EXPIRED`).
 	VerificationState types.String `tfsdk:"verification_state"`
-	SenderEmail       types.String `tfsdk:"sender_email"`
-	Created           types.String `tfsdk:"created"`
-	Updated           types.String `tfsdk:"updated"`
-	Raw               types.String `tfsdk:"raw_json"`
+	// SenderEmail is the email address of the developer who sent the invite.
+	SenderEmail types.String `tfsdk:"sender_email"`
+	// Created is the creation timestamp.
+	Created types.String `tfsdk:"created"`
+	// Updated is the last update timestamp.
+	Updated types.String `tfsdk:"updated"`
+	// Raw is the redacted JSON payload of the invite as returned by the API.
+	Raw types.String `tfsdk:"raw_json"`
 }
 
+// inviteAttributes returns the schema attributes describing a developer invite.
 func inviteAttributes() map[string]schema.Attribute {
 	return map[string]schema.Attribute{
 		"id": schema.StringAttribute{
@@ -328,6 +386,7 @@ func inviteAttributes() map[string]schema.Attribute {
 	}
 }
 
+// inviteModelFromAPI maps a Nile API developer invite to its Terraform model.
 func inviteModelFromAPI(i nileapi.DeveloperInvite) inviteModel {
 	m := inviteModel{
 		ID:                stringOrNull(i.ID),
@@ -343,6 +402,7 @@ func inviteModelFromAPI(i nileapi.DeveloperInvite) inviteModel {
 	return m
 }
 
+// inviteModelsFromAPI maps Nile API developer invites to their Terraform models.
 func inviteModelsFromAPI(invites []nileapi.DeveloperInvite) []inviteModel {
 	out := make([]inviteModel, 0, len(invites))
 	for _, i := range invites {
@@ -353,16 +413,26 @@ func inviteModelsFromAPI(invites []nileapi.DeveloperInvite) []inviteModel {
 
 // --- subscription ----------------------------------------------------------
 
+// subscriptionModel is the Terraform representation of a Nile workspace
+// subscription (nileapi.WorkspaceSubscription).
 type subscriptionModel struct {
-	Workspace            types.String `tfsdk:"workspace"`
-	Level                types.String `tfsdk:"level"`
-	ValidFrom            types.String `tfsdk:"valid_from"`
-	ValidTo              types.String `tfsdk:"valid_to"`
-	SubscriptionID       types.String `tfsdk:"subscription_id"`
+	// Workspace is the workspace the subscription belongs to.
+	Workspace types.String `tfsdk:"workspace"`
+	// Level is the subscription level.
+	Level types.String `tfsdk:"level"`
+	// ValidFrom is the start of the subscription period.
+	ValidFrom types.String `tfsdk:"valid_from"`
+	// ValidTo is the end of the subscription period, if scheduled.
+	ValidTo types.String `tfsdk:"valid_to"`
+	// SubscriptionID is the subscription identifier.
+	SubscriptionID types.String `tfsdk:"subscription_id"`
+	// DefaultPaymentMethod is the default payment method of the subscription, if any.
 	DefaultPaymentMethod types.String `tfsdk:"default_payment_method"`
-	Raw                  types.String `tfsdk:"raw_json"`
+	// Raw is the redacted JSON payload of the subscription as returned by the API.
+	Raw types.String `tfsdk:"raw_json"`
 }
 
+// subscriptionAttributes returns the schema attributes describing a workspace subscription.
 func subscriptionAttributes() map[string]schema.Attribute {
 	return map[string]schema.Attribute{
 		"workspace": schema.StringAttribute{
@@ -397,6 +467,7 @@ func subscriptionAttributes() map[string]schema.Attribute {
 	}
 }
 
+// subscriptionModelFromAPI maps a Nile API workspace subscription to its Terraform model.
 func subscriptionModelFromAPI(s nileapi.WorkspaceSubscription) subscriptionModel {
 	return subscriptionModel{
 		Workspace:            stringOrNull(s.Workspace),
@@ -409,6 +480,7 @@ func subscriptionModelFromAPI(s nileapi.WorkspaceSubscription) subscriptionModel
 	}
 }
 
+// subscriptionModelsFromAPI maps Nile API workspace subscriptions to their Terraform models.
 func subscriptionModelsFromAPI(ss []nileapi.WorkspaceSubscription) []subscriptionModel {
 	out := make([]subscriptionModel, 0, len(ss))
 	for _, s := range ss {
@@ -419,14 +491,23 @@ func subscriptionModelsFromAPI(ss []nileapi.WorkspaceSubscription) []subscriptio
 
 // --- developer -------------------------------------------------------------
 
+// developerModel is the Terraform representation of a Nile developer
+// (nileapi.Developer).
 type developerModel struct {
-	ID         types.String     `tfsdk:"id"`
-	Email      types.String     `tfsdk:"email"`
-	Kind       types.String     `tfsdk:"kind"`
+	// ID is the developer identifier.
+	ID types.String `tfsdk:"id"`
+	// Email is the developer email address.
+	Email types.String `tfsdk:"email"`
+	// Kind is the developer kind (`HUMAN` or `API`).
+	Kind types.String `tfsdk:"kind"`
+	// Workspaces are the workspaces the developer has access to.
 	Workspaces []workspaceModel `tfsdk:"workspaces"`
-	Databases  []databaseModel  `tfsdk:"databases"`
+	// Databases are the databases the developer has access to.
+	Databases []databaseModel `tfsdk:"databases"`
 }
 
+// developerAttributes returns the schema attributes describing a Nile developer,
+// including the nested workspaces and databases the developer has access to.
 func developerAttributes() map[string]schema.Attribute {
 	return map[string]schema.Attribute{
 		"id": schema.StringAttribute{
@@ -454,6 +535,7 @@ func developerAttributes() map[string]schema.Attribute {
 	}
 }
 
+// developerModelFromAPI maps a Nile API developer to its Terraform model.
 func developerModelFromAPI(d nileapi.Developer) developerModel {
 	return developerModel{
 		ID:         stringOrNull(d.ID),

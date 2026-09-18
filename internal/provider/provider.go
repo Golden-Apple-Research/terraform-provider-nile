@@ -20,10 +20,16 @@ import (
 	"github.com/Golden-Apple-Research/nile-terraform/internal/nileapi"
 )
 
+// Environment variables that configure the provider as an alternative to the
+// provider block attributes.
 const (
-	envAPIURL            = "NILE_API_URL"
-	envAPIToken          = "NILE_API_TOKEN"
-	envOAuthClientID     = "NILE_OAUTH_CLIENT_ID"
+	// envAPIURL overrides the api_url provider attribute.
+	envAPIURL = "NILE_API_URL"
+	// envAPIToken overrides the api_token provider attribute.
+	envAPIToken = "NILE_API_TOKEN"
+	// envOAuthClientID overrides the oauth_client_id provider attribute.
+	envOAuthClientID = "NILE_OAUTH_CLIENT_ID"
+	// envOAuthRefreshToken overrides the oauth_refresh_token provider attribute.
 	envOAuthRefreshToken = "NILE_OAUTH_REFRESH_TOKEN"
 )
 
@@ -32,17 +38,23 @@ func New(version string) provider.Provider {
 	return &nileProvider{version: version}
 }
 
+// nileProvider implements the Terraform provider for the Nile control plane.
 type nileProvider struct {
+	// version is the provider version reported to Terraform.
 	version string
 }
 
+// Compile-time assertion that nileProvider implements provider.Provider.
 var _ provider.Provider = &nileProvider{}
 
+// Metadata sets the provider type name ("nile") and its version.
 func (p *nileProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
 	resp.TypeName = "nile"
 	resp.Version = p.version
 }
 
+// Schema defines the provider block attributes: the API base URL, the static
+// API token, and the OAuth refresh-token credentials.
 func (p *nileProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Interact with the Nile control plane API (https://www.thenile.dev).",
@@ -69,13 +81,23 @@ func (p *nileProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp 
 	}
 }
 
+// providerData mirrors the provider block configuration attributes.
 type providerData struct {
-	APIToken          types.String `tfsdk:"api_token"`
-	APIURL            types.String `tfsdk:"api_url"`
-	OAuthClientID     types.String `tfsdk:"oauth_client_id"`
+	// APIToken is the static bearer token for the Nile API.
+	APIToken types.String `tfsdk:"api_token"`
+	// APIURL is the base URL of the Nile API.
+	APIURL types.String `tfsdk:"api_url"`
+	// OAuthClientID identifies the OAuth client used for the token exchange.
+	OAuthClientID types.String `tfsdk:"oauth_client_id"`
+	// OAuthRefreshToken is exchanged for an access token when no static
+	// APIToken is configured.
 	OAuthRefreshToken types.String `tfsdk:"oauth_refresh_token"`
 }
 
+// Configure validates the provider configuration and hands a *nileapi.Client
+// to every data source and resource. Authentication prefers a static API
+// token and otherwise exchanges the configured OAuth refresh token for an
+// access token.
 func (p *nileProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
 	var config providerData
 	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
@@ -179,6 +201,7 @@ func (p *nileProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 	resp.ResourceData = client
 }
 
+// DataSources returns the constructors of all Nile data sources.
 func (p *nileProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		NewDatabaseComputeInstancesDataSource,
@@ -203,6 +226,7 @@ func (p *nileProvider) DataSources(ctx context.Context) []func() datasource.Data
 	}
 }
 
+// Resources returns the constructors of all Nile resources.
 func (p *nileProvider) Resources(ctx context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewDatabaseResource,

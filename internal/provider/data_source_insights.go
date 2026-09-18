@@ -67,6 +67,8 @@ func insightsArgs() map[string]schema.Attribute {
 	}
 }
 
+// insightsQuery converts the optional data source window attributes into an
+// API query.
 func insightsQuery(dataStart, dataEnd, dataGranularity types.String) nileapi.InsightsQuery {
 	return nileapi.InsightsQuery{
 		Start:       dataStart.ValueString(),
@@ -87,34 +89,59 @@ func NewDatabaseUptimeInsightsDataSource() datasource.DataSource {
 	)
 }
 
+// uptimePointModel is one uptime sample of the metrics window.
 type uptimePointModel struct {
-	Timestamp        types.String  `tfsdk:"timestamp"`
+	// Timestamp is the sample time.
+	Timestamp types.String `tfsdk:"timestamp"`
+	// UptimePercentage is the time-weighted uptime share of the sample.
 	UptimePercentage types.Float64 `tfsdk:"uptime_percentage"`
-	UptimeSeconds    types.Int64   `tfsdk:"uptime_seconds"`
-	ObservedSeconds  types.Int64   `tfsdk:"observed_seconds"`
+	// UptimeSeconds is the number of seconds the database was up.
+	UptimeSeconds types.Int64 `tfsdk:"uptime_seconds"`
+	// ObservedSeconds is the number of seconds covered by the sample.
+	ObservedSeconds types.Int64 `tfsdk:"observed_seconds"`
 }
 
+// uptimeSummaryModel aggregates the uptime over the whole window.
 type uptimeSummaryModel struct {
+	// UptimePercentage is the time-weighted uptime share over the window.
 	UptimePercentage types.Float64 `tfsdk:"uptime_percentage"`
-	UptimeSeconds    types.Int64   `tfsdk:"uptime_seconds"`
-	ObservedSeconds  types.Int64   `tfsdk:"observed_seconds"`
+	// UptimeSeconds is the number of seconds the database was up.
+	UptimeSeconds types.Int64 `tfsdk:"uptime_seconds"`
+	// ObservedSeconds is the number of seconds covered by the window.
+	ObservedSeconds types.Int64 `tfsdk:"observed_seconds"`
 }
 
+// databaseUptimeInsightsDataSourceModel is the state of the
+// nile_database_uptime_insights data source.
 type databaseUptimeInsightsDataSourceModel struct {
-	WorkspaceSlug types.String        `tfsdk:"workspace_slug"`
-	Database      types.String        `tfsdk:"database"`
-	Start         types.String        `tfsdk:"start"`
-	End           types.String        `tfsdk:"end"`
-	Granularity   types.String        `tfsdk:"granularity"`
-	ID            types.String        `tfsdk:"id"`
-	Source        types.String        `tfsdk:"source"`
-	Scope         types.String        `tfsdk:"scope"`
-	Calculation   types.String        `tfsdk:"calculation"`
-	Summary       *uptimeSummaryModel `tfsdk:"summary"`
-	Points        []uptimePointModel  `tfsdk:"points"`
-	Raw           types.String        `tfsdk:"raw_json"`
+	// WorkspaceSlug is the workspace owning the database.
+	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
+	// Database is the id of the database.
+	Database types.String `tfsdk:"database"`
+	// Start is the optional start of the metrics window.
+	Start types.String `tfsdk:"start"`
+	// End is the optional end of the metrics window.
+	End types.String `tfsdk:"end"`
+	// Granularity is the optional bucket size of the samples.
+	Granularity types.String `tfsdk:"granularity"`
+	// ID is the stable identifier of this data source instance.
+	ID types.String `tfsdk:"id"`
+	// Source names the component that measured the uptime.
+	Source types.String `tfsdk:"source"`
+	// Scope describes what the uptime was measured over.
+	Scope types.String `tfsdk:"scope"`
+	// Calculation describes how the uptime is calculated.
+	Calculation types.String `tfsdk:"calculation"`
+	// Summary aggregates the uptime over the whole window.
+	Summary *uptimeSummaryModel `tfsdk:"summary"`
+	// Points are the individual uptime samples.
+	Points []uptimePointModel `tfsdk:"points"`
+	// Raw is the redacted JSON payload of the API response.
+	Raw types.String `tfsdk:"raw_json"`
 }
 
+// databaseUptimeInsightsSchema builds the schema of the uptime insights data
+// source on top of the shared insightsArgs attributes.
 func databaseUptimeInsightsSchema(_ context.Context) schema.Schema {
 	attrs := insightsArgs()
 	attrs["source"] = schema.StringAttribute{
@@ -155,6 +182,8 @@ func databaseUptimeInsightsSchema(_ context.Context) schema.Schema {
 	}
 }
 
+// readDatabaseUptimeInsights fetches the uptime metrics of a database and
+// populates the data source state from them.
 func readDatabaseUptimeInsights(ctx context.Context, client *nileapi.Client, data *databaseUptimeInsightsDataSourceModel, resp *datasource.ReadResponse) {
 	workspaceSlug := data.WorkspaceSlug.ValueString()
 	database := data.Database.ValueString()
@@ -204,23 +233,39 @@ func NewDatabaseErrorInsightsDataSource() datasource.DataSource {
 	)
 }
 
+// errorPointModel is one bucketed error count of the metrics window.
 type errorPointModel struct {
-	Timestamp  types.String `tfsdk:"timestamp"`
-	Source     types.String `tfsdk:"source"`
-	ErrorCount types.Int64  `tfsdk:"error_count"`
+	// Timestamp is the bucket time.
+	Timestamp types.String `tfsdk:"timestamp"`
+	// Source names the component that reported the errors.
+	Source types.String `tfsdk:"source"`
+	// ErrorCount is the number of errors observed in the bucket.
+	ErrorCount types.Int64 `tfsdk:"error_count"`
 }
 
+// databaseErrorInsightsDataSourceModel is the state of the
+// nile_database_error_insights data source.
 type databaseErrorInsightsDataSourceModel struct {
-	WorkspaceSlug types.String      `tfsdk:"workspace_slug"`
-	Database      types.String      `tfsdk:"database"`
-	Start         types.String      `tfsdk:"start"`
-	End           types.String      `tfsdk:"end"`
-	Granularity   types.String      `tfsdk:"granularity"`
-	ID            types.String      `tfsdk:"id"`
-	Points        []errorPointModel `tfsdk:"points"`
-	Raw           types.String      `tfsdk:"raw_json"`
+	// WorkspaceSlug is the workspace owning the database.
+	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
+	// Database is the id of the database.
+	Database types.String `tfsdk:"database"`
+	// Start is the optional start of the metrics window.
+	Start types.String `tfsdk:"start"`
+	// End is the optional end of the metrics window.
+	End types.String `tfsdk:"end"`
+	// Granularity is the optional bucket size of the samples.
+	Granularity types.String `tfsdk:"granularity"`
+	// ID is the stable identifier of this data source instance.
+	ID types.String `tfsdk:"id"`
+	// Points are the bucketed error counts.
+	Points []errorPointModel `tfsdk:"points"`
+	// Raw is the redacted JSON payload of the API response.
+	Raw types.String `tfsdk:"raw_json"`
 }
 
+// databaseErrorInsightsSchema builds the schema of the error insights data
+// source on top of the shared insightsArgs attributes.
 func databaseErrorInsightsSchema(_ context.Context) schema.Schema {
 	attrs := insightsArgs()
 	attrs["points"] = schema.ListNestedAttribute{
@@ -239,6 +284,8 @@ func databaseErrorInsightsSchema(_ context.Context) schema.Schema {
 	}
 }
 
+// readDatabaseErrorInsights fetches the error metrics of a database and
+// populates the data source state from them.
 func readDatabaseErrorInsights(ctx context.Context, client *nileapi.Client, data *databaseErrorInsightsDataSourceModel, resp *datasource.ReadResponse) {
 	workspaceSlug := data.WorkspaceSlug.ValueString()
 	database := data.Database.ValueString()
@@ -277,26 +324,47 @@ func NewDatabaseQueryPerformanceInsightsDataSource() datasource.DataSource {
 	)
 }
 
+// queryPerformancePointModel is one query performance sample.
 type queryPerformancePointModel struct {
-	Timestamp             types.String  `tfsdk:"timestamp"`
+	// Timestamp is the sample time.
+	Timestamp types.String `tfsdk:"timestamp"`
+	// ProxyQueriesPerSecond is the query rate observed by Nile Proxy.
 	ProxyQueriesPerSecond types.Float64 `tfsdk:"proxy_queries_per_second"`
+	// ThothQueriesPerSecond is the query rate observed by Thoth.
 	ThothQueriesPerSecond types.Float64 `tfsdk:"thoth_queries_per_second"`
-	ThothP99LatencyMs     types.Float64 `tfsdk:"thoth_p99_latency_ms"`
-	ThothCPUMilliseconds  types.Float64 `tfsdk:"thoth_cpu_milliseconds"`
+	// ThothP99LatencyMs is the P99 query latency in milliseconds reported by
+	// Thoth.
+	ThothP99LatencyMs types.Float64 `tfsdk:"thoth_p99_latency_ms"`
+	// ThothCPUMilliseconds is the CPU time in milliseconds reported by Thoth.
+	ThothCPUMilliseconds types.Float64 `tfsdk:"thoth_cpu_milliseconds"`
 }
 
+// databaseQueryPerformanceInsightsDataSourceModel is the state of the
+// nile_database_query_performance_insights data source.
 type databaseQueryPerformanceInsightsDataSourceModel struct {
-	WorkspaceSlug types.String                 `tfsdk:"workspace_slug"`
-	Database      types.String                 `tfsdk:"database"`
-	Start         types.String                 `tfsdk:"start"`
-	End           types.String                 `tfsdk:"end"`
-	Granularity   types.String                 `tfsdk:"granularity"`
-	ID            types.String                 `tfsdk:"id"`
-	Source        types.String                 `tfsdk:"source"`
-	Points        []queryPerformancePointModel `tfsdk:"points"`
-	Raw           types.String                 `tfsdk:"raw_json"`
+	// WorkspaceSlug is the workspace owning the database.
+	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
+	// Database is the id of the database.
+	Database types.String `tfsdk:"database"`
+	// Start is the optional start of the metrics window.
+	Start types.String `tfsdk:"start"`
+	// End is the optional end of the metrics window.
+	End types.String `tfsdk:"end"`
+	// Granularity is the optional bucket size of the samples.
+	Granularity types.String `tfsdk:"granularity"`
+	// ID is the stable identifier of this data source instance.
+	ID types.String `tfsdk:"id"`
+	// Source names the component that measured the samples.
+	Source types.String `tfsdk:"source"`
+	// Points are the query performance samples.
+	Points []queryPerformancePointModel `tfsdk:"points"`
+	// Raw is the redacted JSON payload of the API response.
+	Raw types.String `tfsdk:"raw_json"`
 }
 
+// databaseQueryPerformanceInsightsSchema builds the schema of the query
+// performance insights data source on top of the shared insightsArgs
+// attributes.
 func databaseQueryPerformanceInsightsSchema(_ context.Context) schema.Schema {
 	attrs := insightsArgs()
 	attrs["source"] = schema.StringAttribute{
@@ -321,6 +389,8 @@ func databaseQueryPerformanceInsightsSchema(_ context.Context) schema.Schema {
 	}
 }
 
+// readDatabaseQueryPerformanceInsights fetches the query performance metrics
+// of a database and populates the data source state from them.
 func readDatabaseQueryPerformanceInsights(ctx context.Context, client *nileapi.Client, data *databaseQueryPerformanceInsightsDataSourceModel, resp *datasource.ReadResponse) {
 	workspaceSlug := data.WorkspaceSlug.ValueString()
 	database := data.Database.ValueString()

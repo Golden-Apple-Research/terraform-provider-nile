@@ -18,10 +18,14 @@ import (
 // data source only supplies its schema and a read function that populates the
 // model in place.
 type readOnlyDataSource[M any] struct {
+	// typeName is the Terraform data source type name (e.g. "nile_database").
 	typeName string
-	schema   func(context.Context) schema.Schema
-	read     func(context.Context, *nileapi.Client, *M, *datasource.ReadResponse)
-	client   *nileapi.Client
+	// schema builds the data source schema.
+	schema func(context.Context) schema.Schema
+	// read fetches the data from the API and populates the model in place.
+	read func(context.Context, *nileapi.Client, *M, *datasource.ReadResponse)
+	// client is the Nile API client injected by Configure.
+	client *nileapi.Client
 }
 
 // newReadOnlyDataSource wires a model type to its schema and read function.
@@ -33,19 +37,24 @@ func newReadOnlyDataSource[M any](
 	return &readOnlyDataSource[M]{typeName: typeName, schema: schemaFn, read: read}
 }
 
+// Compile-time assertions that readOnlyDataSource implements the required
+// data source interfaces.
 var (
 	_ datasource.DataSource              = (*readOnlyDataSource[struct{}])(nil)
 	_ datasource.DataSourceWithConfigure = (*readOnlyDataSource[struct{}])(nil)
 )
 
+// Metadata sets the data source type name.
 func (d *readOnlyDataSource[M]) Metadata(_ context.Context, _ datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = d.typeName
 }
 
+// Schema returns the schema supplied by the concrete data source.
 func (d *readOnlyDataSource[M]) Schema(ctx context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = d.schema(ctx)
 }
 
+// Configure stores the *nileapi.Client handed out by the provider.
 func (d *readOnlyDataSource[M]) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
@@ -61,6 +70,8 @@ func (d *readOnlyDataSource[M]) Configure(_ context.Context, req datasource.Conf
 	d.client = client
 }
 
+// Read loads the config, invokes the concrete read function, and writes the
+// populated model into state.
 func (d *readOnlyDataSource[M]) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var config M
 	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)

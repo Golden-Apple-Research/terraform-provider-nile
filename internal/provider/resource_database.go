@@ -21,6 +21,8 @@ import (
 	"github.com/Golden-Apple-Research/nile-terraform/internal/nileapi"
 )
 
+// Compile-time assertions that databaseResource implements the required
+// resource interfaces.
 var (
 	_ resource.Resource                = &databaseResource{}
 	_ resource.ResourceWithConfigure   = &databaseResource{}
@@ -32,32 +34,53 @@ func NewDatabaseResource() resource.Resource {
 	return &databaseResource{}
 }
 
+// databaseResource implements the nile_database resource.
 type databaseResource struct {
+	// client is the Nile API client injected by Configure.
 	client *nileapi.Client
 }
 
+// databaseResourceModel is the Terraform state of a nile_database resource.
 type databaseResourceModel struct {
-	WorkspaceSlug types.String   `tfsdk:"workspace_slug"`
-	Name          types.String   `tfsdk:"name"`
-	Region        types.String   `tfsdk:"region"`
-	ID            types.String   `tfsdk:"id"`
-	Status        types.String   `tfsdk:"status"`
-	APIHost       types.String   `tfsdk:"api_host"`
-	DBHost        types.String   `tfsdk:"db_host"`
-	Expandable    types.Bool     `tfsdk:"expandable"`
-	Created       types.String   `tfsdk:"created"`
-	Deleted       types.String   `tfsdk:"deleted"`
-	ParentID      types.String   `tfsdk:"parent_id"`
-	ParentName    types.String   `tfsdk:"parent_name"`
-	Raw           types.String   `tfsdk:"raw_json"`
-	ClaimCode     types.String   `tfsdk:"claim_code"`
-	Timeouts      timeouts.Value `tfsdk:"timeouts"`
+	// WorkspaceSlug is the workspace owning the database.
+	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
+	// Name is the database name.
+	Name types.String `tfsdk:"name"`
+	// Region is the region the database runs in.
+	Region types.String `tfsdk:"region"`
+	// ID is the database identifier assigned by the API.
+	ID types.String `tfsdk:"id"`
+	// Status is the lifecycle status of the database.
+	Status types.String `tfsdk:"status"`
+	// APIHost is the host of the database's API endpoint.
+	APIHost types.String `tfsdk:"api_host"`
+	// DBHost is the host of the database's PostgreSQL endpoint.
+	DBHost types.String `tfsdk:"db_host"`
+	// Expandable reports whether the database supports read replicas.
+	Expandable types.Bool `tfsdk:"expandable"`
+	// Created is the creation timestamp.
+	Created types.String `tfsdk:"created"`
+	// Deleted is the deletion timestamp, when the database was marked deleted.
+	Deleted types.String `tfsdk:"deleted"`
+	// ParentID is the identifier of the parent database of a read replica.
+	ParentID types.String `tfsdk:"parent_id"`
+	// ParentName is the name of the parent database of a read replica.
+	ParentName types.String `tfsdk:"parent_name"`
+	// Raw is the redacted JSON payload of the API response.
+	Raw types.String `tfsdk:"raw_json"`
+	// ClaimCode is the code used to claim a provisioned database; it is
+	// consumed by the claim.
+	ClaimCode types.String `tfsdk:"claim_code"`
+	// Timeouts holds the configured create/update/delete timeouts.
+	Timeouts timeouts.Value `tfsdk:"timeouts"`
 }
 
+// Metadata sets the resource type name to "nile_database".
 func (r *databaseResource) Metadata(_ context.Context, _ resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = "nile_database"
 }
 
+// Schema defines the nile_database attributes.
 func (r *databaseResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages a Nile database via `/workspaces/{workspaceSlug}/databases`. " +
@@ -160,6 +183,7 @@ func (r *databaseResource) Schema(ctx context.Context, _ resource.SchemaRequest,
 	}
 }
 
+// Configure stores the *nileapi.Client handed out by the provider.
 func (r *databaseResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
@@ -175,6 +199,8 @@ func (r *databaseResource) Configure(_ context.Context, req resource.ConfigureRe
 	r.client = client
 }
 
+// Create creates the database (or claims a provisioned one via claim_code)
+// and waits until it reports READY before completing.
 func (r *databaseResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan databaseResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -279,6 +305,8 @@ func (r *databaseResource) Create(ctx context.Context, req resource.CreateReques
 	}
 }
 
+// Read refreshes the database state from the API and removes the resource
+// from state when the database no longer exists.
 func (r *databaseResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state databaseResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -314,6 +342,8 @@ func (r *databaseResource) Read(ctx context.Context, req resource.ReadRequest, r
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
+// Update renames the database in place; a rename is the only supported
+// in-place change, every other change forces replacement.
 func (r *databaseResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan, state databaseResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -383,6 +413,7 @@ func (r *databaseResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 }
 
+// Delete deletes the database and waits until the API no longer reports it.
 func (r *databaseResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state databaseResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -427,6 +458,7 @@ func (r *databaseResource) Delete(ctx context.Context, req resource.DeleteReques
 	resp.State.RemoveResource(ctx)
 }
 
+// ImportState imports a database from a `workspace_slug/name` ID.
 func (r *databaseResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	parts, err := splitResourceID(req.ID, 2)
 	if err != nil {

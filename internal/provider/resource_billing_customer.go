@@ -20,6 +20,7 @@ import (
 	"github.com/Golden-Apple-Research/nile-terraform/internal/nileapi"
 )
 
+// Interface compliance assertions for billingCustomerResource.
 var (
 	_ resource.Resource                = &billingCustomerResource{}
 	_ resource.ResourceWithConfigure   = &billingCustomerResource{}
@@ -31,21 +32,31 @@ func NewBillingCustomerResource() resource.Resource {
 	return &billingCustomerResource{}
 }
 
+// billingCustomerResource manages the Stripe billing customer linked to a
+// Nile workspace (nile_billing_customer).
 type billingCustomerResource struct {
 	client *nileapi.Client
 }
 
+// billingCustomerResourceModel holds the Terraform state of the
+// nile_billing_customer resource: the Stripe customer linked to a workspace.
 type billingCustomerResourceModel struct {
-	WorkspaceSlug        types.String `tfsdk:"workspace_slug"`
-	StripeCustomerID     types.String `tfsdk:"stripe_customer_id"`
+	// WorkspaceSlug is the workspace the billing customer is linked to.
+	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
+	// StripeCustomerID is the linked Stripe customer identifier.
+	StripeCustomerID types.String `tfsdk:"stripe_customer_id"`
+	// DefaultPaymentMethod is the customer's default payment method, if any.
 	DefaultPaymentMethod types.String `tfsdk:"default_payment_method"`
-	Raw                  types.String `tfsdk:"raw_json"`
+	// Raw is the redacted raw JSON payload returned by the API.
+	Raw types.String `tfsdk:"raw_json"`
 }
 
+// Metadata sets the Terraform resource type name to nile_billing_customer.
 func (r *billingCustomerResource) Metadata(_ context.Context, _ resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = "nile_billing_customer"
 }
 
+// Schema defines the attributes of the nile_billing_customer resource.
 func (r *billingCustomerResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Ensures a Stripe billing customer exists for a Nile workspace via " +
@@ -80,6 +91,8 @@ func (r *billingCustomerResource) Schema(_ context.Context, _ resource.SchemaReq
 	}
 }
 
+// Configure wires the shared Nile API client from the provider into the
+// resource.
 func (r *billingCustomerResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
@@ -92,6 +105,8 @@ func (r *billingCustomerResource) Configure(_ context.Context, req resource.Conf
 	r.client = client
 }
 
+// Create ensures a Stripe billing customer exists for the workspace and
+// stores the resulting state.
 func (r *billingCustomerResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan billingCustomerResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -179,15 +194,20 @@ func (r *billingCustomerResource) Update(ctx context.Context, req resource.Updat
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
+// Delete removes the resource from Terraform state only: the Nile API does
+// not support unlinking a billing customer.
 func (r *billingCustomerResource) Delete(ctx context.Context, _ resource.DeleteRequest, _ *resource.DeleteResponse) {
 	// The Nile API cannot unlink a billing customer from a workspace.
 	tflog.Warn(ctx, "the Nile API does not support unlinking a billing customer; it is removed from Terraform state only")
 }
 
+// ImportState imports the resource by workspace slug.
 func (r *billingCustomerResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("workspace_slug"), req, resp)
 }
 
+// applyBillingCustomerResource copies an API billing customer into the
+// Terraform resource model.
 func applyBillingCustomerResource(m *billingCustomerResourceModel, customer nileapi.WorkspaceBillingCustomer) {
 	m.StripeCustomerID = stringOrNull(customer.StripeCustomerID)
 	m.DefaultPaymentMethod = stringOrNull(customer.DefaultPaymentMethod)
