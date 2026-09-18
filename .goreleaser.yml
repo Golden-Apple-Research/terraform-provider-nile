@@ -57,8 +57,6 @@ signs:
   - id: checksums
     artifacts: checksum
     cmd: gpg
-    output: true
-    signature: '${signature}'
     args:
       - --batch
       - -u
