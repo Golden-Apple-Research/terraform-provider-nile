@@ -22,8 +22,6 @@ provider "nile" {
 }
 ```
 
-<!-- schema: provider -->
-
 ## Data Sources
 
 ### `nile_database_compute_instances`
@@ -45,25 +43,63 @@ output "instance_ids" {
 }
 ```
 
-<!-- schema: data.nile_database_compute_instances -->
+Each element of `instances` promotes the documented API fields:
 
-Each element of `instances` exposes best-effort promoted fields
-(`id`, `status`, `size`, `region`, `created_at`) plus `raw_json`
-containing the full, unparsed instance payload returned by the API —
-so attributes the API adds later remain accessible via `jsondecode()`.
+| Attribute | API field |
+|---|---|
+| `id` | `instanceId` |
+| `name` | `instanceName` |
+| `status` | `status` (`PENDING`, `PROVISIONING`, `READY`, `RESIZING`, `DELETING`, `FAILED`, `TERMINATED`) |
+| `size` | `instanceType.computeSize` |
+| `region` | `region` (`AWS_US_WEST_2`, `AWS_EU_CENTRAL_1`, `AZURE_EASTUS`) |
+| `created_at` | `created` |
+
+plus `raw_json` containing the full, unparsed instance payload returned by
+the API — so attributes the API adds later remain accessible via
+`jsondecode()`.
 
 ## Development
 
-Requirements: Go ≥ 1.24, Terraform ≥ 1.5.
+Requirements: Go ≥ 1.24, Terraform ≥ 1.5, Python 3 (only for the smoke test).
 
 ```sh
 make build   # build the provider binary into bin/
 make test    # run unit tests
-make install # build + copy into the local plugin mirror for dev_overrides
-
-# Enable local development overrides:
-echo 'provider_installation { dev_overrides { "registry.terraform.io/golden-apple-research/nile" = "'"$(pwd)"'" } direct {} }' \
-  > ~/.terraformrc
+make vet     # run go vet
+make smoke   # end-to-end test against the local mock API
 ```
 
-Then run `terraform plan` inside `examples/` with `NILE_API_TOKEN` set.
+### Local development with `dev_overrides`
+
+`make build` writes the provider binary to `bin/`. Point Terraform at that
+directory — not at the repository root:
+
+```sh
+cat > ~/.terraformrc <<EOF
+provider_installation {
+  dev_overrides {
+    "registry.terraform.io/golden-apple-research/nile" = "$(pwd)/bin"
+  }
+  direct {}
+}
+EOF
+```
+
+Then run `terraform plan` from a configuration that uses the provider; the
+configuration in `tests/smoke/` is a complete example
+(`NILE_API_TOKEN=test-token-123`, mock API on `127.0.0.1:18080`).
+
+### Installing into the local plugin mirror
+
+Alternatively, `make install VERSION=0.1.0` copies the binary into
+`~/.terraform.d/plugins/registry.terraform.io/golden-apple-research/nile/0.1.0/<os_arch>/`,
+where `terraform init` picks it up without a CLI config. `VERSION` must be a
+valid semver version that satisfies the version constraint of the
+configuration (the examples use `~> 0.1`); the default `VERSION=dev` is not
+installable.
+
+### Publishing
+
+The provider address `registry.terraform.io/golden-apple-research/nile`
+requires the GitHub repository to be named `terraform-provider-nile`
+(currently `nile-terraform`).

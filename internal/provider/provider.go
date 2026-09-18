@@ -66,6 +66,26 @@ func (p *nileProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 		return
 	}
 
+	if config.APIURL.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("api_url"),
+			"Unknown Nile API URL",
+			"The provider cannot create the Nile API client as there is an unknown configuration value for the Nile API URL. "+
+				"Set the value statically in the provider block or via the "+envAPIURL+" environment variable.",
+		)
+	}
+	if config.APIToken.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("api_token"),
+			"Unknown Nile API token",
+			"The provider cannot create the Nile API client as there is an unknown configuration value for the Nile API token. "+
+				"Set the value statically in the provider block or via the "+envAPIToken+" environment variable.",
+		)
+	}
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	apiURL := os.Getenv(envAPIURL)
 	if !config.APIURL.IsNull() && config.APIURL.ValueString() != "" {
 		apiURL = config.APIURL.ValueString()

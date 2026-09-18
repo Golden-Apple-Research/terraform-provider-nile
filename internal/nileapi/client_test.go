@@ -4,14 +4,21 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
+const sampleInstance = `{
+	"instanceId": "inst-1",
+	"instanceName": "primary",
+	"instanceType": {"id": "tier-1", "computeSize": "large", "memory": "8GB", "hourlyCost": 0.42},
+	"status": "READY",
+	"region": "AWS_US_WEST_2",
+	"created": "2025-06-01T12:00:00Z"
+}`
+
 func TestDecodeInstancesBareArray(t *testing.T) {
-	body := []byte(`[
-		{"id": "ci-1", "status": "running", "size": "standard-2", "region": "us-east-1", "created_at": "2025-06-01T12:00:00Z"},
-		{"id": "ci-2", "status": "terminated"}
-	]`)
+	body := []byte("[" + sampleInstance + `, {"instanceId": "inst-2", "status": "TERMINATED"}]`)
 	got, err := decodeInstances(body)
 	if err != nil {
 		t.Fatalf("decodeInstances failed: %v", err)
@@ -19,11 +26,21 @@ func TestDecodeInstancesBareArray(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("expected 2 instances, got %d", len(got))
 	}
-	if got[0].ID != "ci-1" || got[0].Status != "running" || got[0].Size != "standard-2" {
-		t.Errorf("instance 0 fields not promoted: %+v", got[0])
+	want := ComputeInstance{
+		ID:        "inst-1",
+		Name:      "primary",
+		Status:    "READY",
+		Size:      "large",
+		Region:    "AWS_US_WEST_2",
+		CreatedAt: "2025-06-01T12:00:00Z",
 	}
-	if got[1].Status != "terminated" {
-		t.Errorf("instance 1 status = %q, want terminated", got[1].Status)
+	if got[0].ID != want.ID || got[0].Name != want.Name || got[0].Status != want.Status ||
+		got[0].Size != want.Size || got[0].Region != want.Region || got[0].CreatedAt != want.CreatedAt {
+		t.Errorf("instance 0 = %+v, want %+v", got[0], want)
+	}
+	// Fields missing from the payload must stay empty rather than fail the decode.
+	if got[1].ID != "inst-2" || got[1].Name != "" || got[1].Size != "" || got[1].CreatedAt != "" {
+		t.Errorf("instance 1 = %+v", got[1])
 	}
 	var raw map[string]any
 	if err := json.Unmarshal(got[0].Raw, &raw); err != nil {
@@ -32,8 +49,8 @@ func TestDecodeInstancesBareArray(t *testing.T) {
 }
 
 func TestDecodeInstancesWrapper(t *testing.T) {
-	for _, key := range []string{"instances", "compute", "items", "data", "results"} {
-		body := []byte(`{"` + key + `": [{"id": "wrapped-1"}], "count": 1}`)
+	for _, key := range wrapperKeys {
+		body := []byte(`{"` + key + `": [{"instanceId": "wrapped-1"}], "count": 1}`)
 		got, err := decodeInstances(body)
 		if err != nil {
 			t.Fatalf("key %q: decodeInstances failed: %v", key, err)
@@ -54,16 +71,28 @@ func TestDecodeInstancesEmptyArray(t *testing.T) {
 	}
 }
 
+func TestDecodeInstancesUnknownObject(t *testing.T) {
+	if _, err := decodeInstances([]byte(`{"foo": "bar"}`)); err == nil {
+		t.Fatal("expected error for object without an instance array")
+	}
+}
+
+func TestDecodeInstancesWrapperNotArray(t *testing.T) {
+	if _, err := decodeInstances([]byte(`{"instances": {"instanceId": "x"}}`)); err == nil {
+		t.Fatal("expected error for wrapper whose value is not an array")
+	}
+}
+
 func TestListComputeInstances(t *testing.T) {
-	var gotPath, gotAuth, gotStart, gotEnd string
+	var gotRequestURI, gotAuth, gotStart, gotEnd string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
+		gotRequestURI = r.RequestURI
 		gotAuth = r.Header.Get("Authorization")
 		q := r.URL.Query()
 		gotStart = q.Get("start")
 		gotEnd = q.Get("end")
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`[{"id":"ci-x","status":"running"}]`))
+		_, _ = w.Write([]byte(`[{"instanceId":"inst-x","status":"READY"}]`))
 	}))
 	defer srv.Close()
 
@@ -71,12 +100,14 @@ func TestListComputeInstances(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
-	got, err := c.ListComputeInstances(t.Context(), "ws 1", "db 2", "2025-01-01T00:00:00Z", "")
+	got, err := c.ListComputeInstances(t.Context(), "ws 1", "db/2", "2025-01-01T00:00:00Z", "")
 	if err != nil {
 		t.Fatalf("ListComputeInstances: %v", err)
 	}
-	if gotPath != "/workspaces/ws 1/databases/db 2/compute" {
-		t.Errorf("path = %q", gotPath)
+	// RequestURI keeps the escaped path segments: spaces as %20 and slashes
+	// inside a segment as %2F.
+	if !strings.HasPrefix(gotRequestURI, "/workspaces/ws%201/databases/db%2F2/compute?") {
+		t.Errorf("request URI = %q", gotRequestURI)
 	}
 	if gotAuth != "Bearer tok-1" {
 		t.Errorf("auth = %q", gotAuth)
@@ -84,7 +115,7 @@ func TestListComputeInstances(t *testing.T) {
 	if gotStart != "2025-01-01T00:00:00Z" || gotEnd != "" {
 		t.Errorf("start=%q end=%q", gotStart, gotEnd)
 	}
-	if len(got) != 1 || got[0].ID != "ci-x" {
+	if len(got) != 1 || got[0].ID != "inst-x" {
 		t.Errorf("instances = %+v", got)
 	}
 }

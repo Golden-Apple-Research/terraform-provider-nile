@@ -34,6 +34,7 @@ type computeInstancesDataSource struct {
 
 type computeInstanceModel struct {
 	ID        types.String `tfsdk:"id"`
+	Name      types.String `tfsdk:"name"`
 	Status    types.String `tfsdk:"status"`
 	Size      types.String `tfsdk:"size"`
 	Region    types.String `tfsdk:"region"`
@@ -93,23 +94,27 @@ func (d *computeInstancesDataSource) Schema(_ context.Context, _ datasource.Sche
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
 							Computed:            true,
-							MarkdownDescription: "Instance identifier, if reported by the API.",
+							MarkdownDescription: "Instance identifier (`instanceId` in the API response).",
+						},
+						"name": schema.StringAttribute{
+							Computed:            true,
+							MarkdownDescription: "Instance name (`instanceName` in the API response).",
 						},
 						"status": schema.StringAttribute{
 							Computed:            true,
-							MarkdownDescription: "Instance status, if reported by the API.",
+							MarkdownDescription: "Instance status (`PENDING`, `PROVISIONING`, `READY`, `RESIZING`, `DELETING`, `FAILED` or `TERMINATED`).",
 						},
 						"size": schema.StringAttribute{
 							Computed:            true,
-							MarkdownDescription: "Instance size/tier, if reported by the API.",
+							MarkdownDescription: "Compute size of the instance's current type (`instanceType.computeSize` in the API response).",
 						},
 						"region": schema.StringAttribute{
 							Computed:            true,
-							MarkdownDescription: "Instance region/location, if reported by the API.",
+							MarkdownDescription: "Region the instance runs in (`AWS_US_WEST_2`, `AWS_EU_CENTRAL_1` or `AZURE_EASTUS`).",
 						},
 						"created_at": schema.StringAttribute{
 							Computed:            true,
-							MarkdownDescription: "Instance creation timestamp, if reported by the API.",
+							MarkdownDescription: "Instance creation timestamp (`created` in the API response).",
 						},
 						"raw_json": schema.StringAttribute{
 							Computed:            true,
@@ -191,6 +196,7 @@ func (d *computeInstancesDataSource) Read(ctx context.Context, req datasource.Re
 	for _, ci := range instances {
 		data.Instances = append(data.Instances, computeInstanceModel{
 			ID:        stringOrNull(ci.ID),
+			Name:      stringOrNull(ci.Name),
 			Status:    stringOrNull(ci.Status),
 			Size:      stringOrNull(ci.Size),
 			Region:    stringOrNull(ci.Region),

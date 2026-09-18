@@ -19,3 +19,14 @@ output "instance_ids" {
 output "instance_count" {
   value = length(data.nile_database_compute_instances.all.instances)
 }
+
+output "instance_summary" {
+  value = [for inst in data.nile_database_compute_instances.all.instances : {
+    id         = inst.id
+    name       = inst.name
+    status     = inst.status
+    size       = inst.size
+    region     = inst.region
+    created_at = inst.created_at
+  }]
+}
