@@ -62,7 +62,7 @@ make test    # run unit tests
 make install # build + copy into the local plugin mirror for dev_overrides
 
 # Enable local development overrides:
-echo 'provider_installation { dev_overrides { "registry.terraform.io/mal-2/nile" = "'"$(pwd)"'" } direct {} }' \
+echo 'provider_installation { dev_overrides { "registry.terraform.io/golden-apple-research/nile" = "'"$(pwd)"'" } direct {} }' \
   > ~/.terraformrc
 ```
 

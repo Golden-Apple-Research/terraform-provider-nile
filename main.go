@@ -9,7 +9,7 @@ import (
 	tfprovider "github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 
-	"github.com/mal-2/terraform-provider-nile/internal/provider"
+	"github.com/Golden-Apple-Research/nile-terraform/internal/provider"
 )
 
 // Provider metadata. These values are baked into the binary at build time
@@ -20,7 +20,7 @@ var (
 
 func main() {
 	opts := providerserver.ServeOpts{
-		Address: "registry.terraform.io/mal-2/nile",
+		Address: "registry.terraform.io/golden-apple-research/nile",
 	}
 
 	newProvider := func() tfprovider.Provider {

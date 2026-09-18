@@ -13,7 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/mal-2/terraform-provider-nile/internal/nileapi"
+	"github.com/Golden-Apple-Research/nile-terraform/internal/nileapi"
 )
 
 const (

@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     nile = {
-      source = "mal-2/nile"
+      source = "golden-apple-research/nile"
     }
   }
 }

@@ -13,7 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
-	"github.com/mal-2/terraform-provider-nile/internal/nileapi"
+	"github.com/Golden-Apple-Research/nile-terraform/internal/nileapi"
 )
 
 // Ensure the data source satisfies the expected interfaces.

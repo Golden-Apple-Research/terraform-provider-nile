@@ -1,4 +1,4 @@
-module github.com/mal-2/terraform-provider-nile
+module github.com/Golden-Apple-Research/nile-terraform
 
 go 1.24
 
