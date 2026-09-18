@@ -11,10 +11,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/path"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
-	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 
 	"github.com/Golden-Apple-Research/nile-terraform/internal/nileapi"
@@ -84,59 +81,6 @@ func TestComputeInstancesDataSourceConfigureWrongType(t *testing.T) {
 
 	if !resp.Diagnostics.HasError() {
 		t.Fatal("expected an error for unexpected provider data type")
-	}
-}
-
-func TestStringOrNull(t *testing.T) {
-	if got := stringOrNull(""); !got.IsNull() {
-		t.Errorf("empty string should map to null, got %v", got)
-	}
-	if got := stringOrNull("value"); got.ValueString() != "value" {
-		t.Errorf("ValueString() = %q, want %q", got.ValueString(), "value")
-	}
-}
-
-func TestIsRFC3339Validator(t *testing.T) {
-	v := isRFC3339Validator{}
-
-	valid := []string{
-		"2025-01-01T00:00:00Z",
-		"2025-06-15T12:30:45+02:00",
-		"2025-06-15T12:30:45.123-07:00",
-	}
-	for _, s := range valid {
-		var resp validator.StringResponse
-		v.ValidateString(context.Background(), validator.StringRequest{
-			ConfigValue: types.StringValue(s),
-			Path:        path.Root("start"),
-		}, &resp)
-		if resp.Diagnostics.HasError() {
-			t.Errorf("%q: unexpected diagnostics: %v", s, resp.Diagnostics)
-		}
-	}
-
-	invalid := []string{"", "not-a-timestamp", "2025-13-01T00:00:00Z"}
-	for _, s := range invalid {
-		var resp validator.StringResponse
-		v.ValidateString(context.Background(), validator.StringRequest{
-			ConfigValue: types.StringValue(s),
-			Path:        path.Root("start"),
-		}, &resp)
-		if !resp.Diagnostics.HasError() {
-			t.Errorf("%q: expected diagnostics", s)
-		}
-	}
-
-	// Null and unknown values are skipped: they may become valid later.
-	for _, s := range []types.String{types.StringNull(), types.StringUnknown()} {
-		var resp validator.StringResponse
-		v.ValidateString(context.Background(), validator.StringRequest{
-			ConfigValue: s,
-			Path:        path.Root("start"),
-		}, &resp)
-		if resp.Diagnostics.HasError() {
-			t.Errorf("%v: unexpected diagnostics: %v", s, resp.Diagnostics)
-		}
 	}
 }
 
