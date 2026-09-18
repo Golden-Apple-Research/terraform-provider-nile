@@ -1,3 +1,12 @@
+terraform {
+  required_providers {
+    nile = {
+      source  = "golden-apple-research/nile"
+      version = "~> 0.1"
+    }
+  }
+}
+
 # List all dedicated compute instances of a database
 data "nile_database_compute_instances" "all" {
   workspace_slug = "my-workspace"
