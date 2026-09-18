@@ -58,7 +58,7 @@ func insightsArgs() map[string]schema.Attribute {
 		},
 		"raw_json": schema.StringAttribute{
 			Computed:            true,
-			MarkdownDescription: "Full, unparsed JSON payload of the response as returned by the API.",
+			MarkdownDescription: "Redacted JSON payload of the response as returned by the API.",
 		},
 	}
 }
@@ -185,7 +185,7 @@ func readDatabaseUptimeInsights(ctx context.Context, client *nileapi.Client, dat
 			ObservedSeconds:  types.Int64Value(p.ObservedSeconds),
 		})
 	}
-	data.Raw = types.StringValue(string(out.Raw))
+	data.Raw = redactedRawJSON(out.Raw)
 }
 
 // --- nile_database_error_insights ------------------------------------------
@@ -258,7 +258,7 @@ func readDatabaseErrorInsights(ctx context.Context, client *nileapi.Client, data
 			ErrorCount: types.Int64Value(p.ErrorCount),
 		})
 	}
-	data.Raw = types.StringValue(string(out.Raw))
+	data.Raw = redactedRawJSON(out.Raw)
 }
 
 // --- nile_database_query_performance_insights --------------------------------
@@ -343,5 +343,5 @@ func readDatabaseQueryPerformanceInsights(ctx context.Context, client *nileapi.C
 			ThothCPUMilliseconds:  types.Float64Value(p.ThothCPUMilliseconds),
 		})
 	}
-	data.Raw = types.StringValue(string(out.Raw))
+	data.Raw = redactedRawJSON(out.Raw)
 }

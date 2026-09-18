@@ -124,7 +124,7 @@ func computeInstancesSchema(_ context.Context) schema.Schema {
 						},
 						"raw_json": schema.StringAttribute{
 							Computed:            true,
-							MarkdownDescription: "Full, unparsed JSON payload of the instance as returned by the API.",
+							MarkdownDescription: "Redacted JSON payload of the instance as returned by the API.",
 						},
 					},
 				},
@@ -184,7 +184,7 @@ func readComputeInstances(ctx context.Context, client *nileapi.Client, data *com
 			Size:      stringOrNull(ci.Size),
 			Region:    stringOrNull(ci.Region),
 			CreatedAt: stringOrNull(ci.CreatedAt),
-			Raw:       types.StringValue(string(ci.Raw)),
+			Raw:       redactedRawJSON(ci.Raw),
 		})
 	}
 }

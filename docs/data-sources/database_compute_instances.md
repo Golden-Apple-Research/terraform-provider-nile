@@ -67,11 +67,11 @@ Invalid timestamps, empty identifiers, and inverted time windows (`start` after 
   - `size` - Compute size of the instance's current type (`instanceType.computeSize` in the Nile API response).
   - `region` - Region where the instance runs. Possible values are `AWS_US_WEST_2`, `AWS_EU_CENTRAL_1`, and `AZURE_EASTUS`.
   - `created_at` - Instance creation timestamp (`created` in the Nile API response).
-  - `raw_json` - Full, unparsed JSON payload for the instance. Use `jsondecode()` to access fields that are not promoted to typed attributes.
+  - `raw_json` - Redacted JSON payload for the instance. Use `jsondecode()` to access fields that are not promoted to typed attributes.
 
 ## Notes
 
-The provider preserves the complete API payload in `raw_json`, so fields introduced by the Nile API in the future remain accessible even before the provider exposes dedicated typed attributes for them.
+The provider preserves the API payload in `raw_json` (common secret fields such as passwords and tokens are replaced with `[REDACTED]`), so fields introduced by the Nile API in the future remain accessible even before the provider exposes dedicated typed attributes for them.
 
 ### Pagination
 

@@ -32,7 +32,7 @@ resource "nile_database_compute_instance" "example" {
   - `hourly_cost` - (Computed) Hourly cost of the instance's current type in USD (`instanceType.hourlyCost` in the API response).
   - `id` - (Computed) Instance identifier (`instanceId` in the API response).
   - `memory` - (Computed) Memory of the instance's current type (`instanceType.memory` in the API response).
-  - `raw_json` - (Computed) Full, unparsed JSON payload of the instance as returned by the API.
+  - `raw_json` - (Computed) Redacted JSON payload of the instance as returned by the API.
   - `region` - (Computed) Region the instance runs in.
   - `status` - (Computed) Instance status (`PENDING`, `PROVISIONING`, `READY`, `RESIZING`, `DELETING`, `FAILED` or `TERMINATED`).
   - `updated_at` - (Computed) Timestamp of the last instance update (`updated` in the API response).

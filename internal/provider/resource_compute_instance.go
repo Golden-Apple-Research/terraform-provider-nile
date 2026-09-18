@@ -127,7 +127,7 @@ func (r *computeInstanceResource) Schema(_ context.Context, _ resource.SchemaReq
 			},
 			"raw_json": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "Full, unparsed JSON payload of the instance as returned by the API.",
+				MarkdownDescription: "Redacted JSON payload of the instance as returned by the API.",
 			},
 		},
 	}
@@ -368,6 +368,6 @@ func applyComputeInstanceResource(m *computeInstanceResourceModel, instance nile
 		m.UpdatedAt = types.StringValue(instance.Updated)
 	}
 	if len(instance.Raw) > 0 {
-		m.Raw = types.StringValue(string(instance.Raw))
+		m.Raw = redactedRawJSON(instance.Raw)
 	}
 }

@@ -31,7 +31,7 @@ data "nile_workspace_developers" "example" {
       - `name` - (Computed) Database name.
       - `parent_id` - (Computed) Identifier of the parent (primary) database for read replicas.
       - `parent_name` - (Computed) Name of the parent (primary) database for read replicas.
-      - `raw_json` - (Computed) Full, unparsed JSON payload of the database as returned by the API.
+      - `raw_json` - (Computed) Redacted JSON payload of the database as returned by the API.
       - `region` - (Computed) Region the database runs in (`AWS_US_WEST_2`, `AWS_EU_CENTRAL_1` or `AZURE_EASTUS`).
       - `status` - (Computed) Database status (`PENDING`, `REQUESTED`, `BUILT`, `POOLED` or `READY`).
     - `email` - (Computed) Developer email address.

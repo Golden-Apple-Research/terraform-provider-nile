@@ -128,7 +128,7 @@ func (r *databaseResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"raw_json": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "Full, unparsed JSON payload of the database as returned by the API.",
+				MarkdownDescription: "Redacted JSON payload of the database as returned by the API.",
 			},
 		},
 	}

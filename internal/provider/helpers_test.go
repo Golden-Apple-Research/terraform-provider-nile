@@ -60,9 +60,9 @@ func TestSplitResourceID(t *testing.T) {
 }
 
 func TestRedactedRawJSON(t *testing.T) {
-	got := redactedRawJSON(json.RawMessage(`{"password":"pw","code":"invite","nested":{"access_token":"token"},"name":"safe"}`))
+	got := redactedRawJSON(json.RawMessage(`{"password":"pw","code":"invite","nested":{"access_token":"token","apiKey":"api-key","secret_key":"secret-key","privateKey":"private-key"},"name":"safe"}`))
 	value := got.ValueString()
-	for _, secret := range []string{`:"pw"`, `:"invite"`, `:"token"`} {
+	for _, secret := range []string{`:"pw"`, `:"invite"`, `:"token"`, `:"api-key"`, `:"secret-key"`, `:"private-key"`} {
 		if strings.Contains(value, secret) {
 			t.Errorf("redacted JSON contains secret %q: %s", secret, value)
 		}
@@ -104,17 +104,19 @@ func TestAPIFieldPresent(t *testing.T) {
 
 func TestIsSensitiveJSONKey(t *testing.T) {
 	sensitive := []string{
-		"password", "PASSWORD", "Password",
+		"password", "PASSWORD", "Password", "dbPassword", "passwd",
 		"code", "claimCode", "claim_code", "claim-code",
-		"secret", "clientSecret", "client_secret",
+		"secret", "clientSecret", "client_secret", "secretKey", "secret_key",
 		"token", "accessToken", "access_token", "refreshToken", "apiToken", "api-token",
+		"idToken", "session_token", "apiKey", "api_key", "privateKey", "private-key",
+		"authorization", "bearer",
 	}
 	for _, key := range sensitive {
 		if !isSensitiveJSONKey(key) {
 			t.Errorf("%q should be sensitive", key)
 		}
 	}
-	for _, key := range []string{"id", "name", "email", "createdAt", "codesharing", "tokenizer"} {
+	for _, key := range []string{"id", "name", "email", "createdAt", "codesharing", "tokenizer", "monkey", "keyboard", "accessKeyId"} {
 		if isSensitiveJSONKey(key) {
 			t.Errorf("%q should not be sensitive", key)
 		}

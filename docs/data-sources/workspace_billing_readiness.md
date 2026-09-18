@@ -25,7 +25,7 @@ data "nile_workspace_billing_readiness" "example" {
   - `detail` - (Computed) Human-readable detail about the readiness result.
   - `id` - (Computed) Stable identifier of this data source instance (the workspace slug).
   - `last_error` - (Computed) Last error observed while resolving billing state, if any.
-  - `raw_json` - (Computed) Full, unparsed JSON payload of the response as returned by the API.
+  - `raw_json` - (Computed) Redacted JSON payload of the response as returned by the API.
   - `source` - (Computed) Source of the readiness result.
   - `status` - (Computed) Readiness status (`ready`, `missing_customer`, `missing_payment_method`, `lookup_failed` or `manual_review_required`).
   - `stripe_customer_id` - (Computed) Stripe customer linked to the workspace, if any.

@@ -97,7 +97,7 @@ func workspaceBillingReadinessSchema(_ context.Context) schema.Schema {
 			},
 			"raw_json": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "Full, unparsed JSON payload of the response as returned by the API.",
+				MarkdownDescription: "Redacted JSON payload of the response as returned by the API.",
 			},
 		},
 	}
@@ -125,7 +125,7 @@ func readWorkspaceBillingReadiness(ctx context.Context, client *nileapi.Client, 
 	data.LastError = stringOrNull(out.LastError)
 	data.Source = stringOrNull(out.Source)
 	data.Detail = stringOrNull(out.Detail)
-	data.Raw = types.StringValue(string(out.Raw))
+	data.Raw = redactedRawJSON(out.Raw)
 }
 
 // --- nile_workspace_billing_totals ------------------------------------------
@@ -186,7 +186,7 @@ func workspaceBillingTotalsSchema(_ context.Context) schema.Schema {
 			},
 			"raw_json": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "Full, unparsed JSON payload of the response as returned by the API.",
+				MarkdownDescription: "Redacted JSON payload of the response as returned by the API.",
 			},
 		},
 	}
@@ -213,5 +213,5 @@ func readWorkspaceBillingTotals(ctx context.Context, client *nileapi.Client, dat
 		return
 	}
 	data.Totals = totals
-	data.Raw = types.StringValue(string(out.Raw))
+	data.Raw = redactedRawJSON(out.Raw)
 }

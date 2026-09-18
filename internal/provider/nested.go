@@ -132,7 +132,7 @@ func databaseAttributes() map[string]schema.Attribute {
 		},
 		"raw_json": schema.StringAttribute{
 			Computed:            true,
-			MarkdownDescription: "Full, unparsed JSON payload of the database as returned by the API.",
+			MarkdownDescription: "Redacted JSON payload of the database as returned by the API.",
 		},
 	}
 }
@@ -148,7 +148,7 @@ func databaseModelFromAPI(db nileapi.Database) databaseModel {
 		Expandable: types.BoolValue(db.Expandable),
 		Created:    stringOrNull(db.Created),
 		Deleted:    stringOrNull(db.Deleted),
-		Raw:        types.StringValue(string(db.Raw)),
+		Raw:        redactedRawJSON(db.Raw),
 	}
 	if db.Parent != nil {
 		m.ParentID = stringOrNull(db.Parent.ID)
@@ -390,7 +390,7 @@ func subscriptionAttributes() map[string]schema.Attribute {
 		},
 		"raw_json": schema.StringAttribute{
 			Computed:            true,
-			MarkdownDescription: "Full, unparsed JSON payload of the subscription as returned by the API.",
+			MarkdownDescription: "Redacted JSON payload of the subscription as returned by the API.",
 		},
 	}
 }
@@ -403,7 +403,7 @@ func subscriptionModelFromAPI(s nileapi.WorkspaceSubscription) subscriptionModel
 		ValidTo:              stringOrNull(s.ValidTo),
 		SubscriptionID:       stringOrNull(s.SubscriptionID),
 		DefaultPaymentMethod: stringOrNull(s.DefaultPaymentMethod),
-		Raw:                  types.StringValue(string(s.Raw)),
+		Raw:                  redactedRawJSON(s.Raw),
 	}
 }
 

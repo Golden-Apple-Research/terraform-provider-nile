@@ -133,7 +133,7 @@ func workspaceComputeUsageSchema(_ context.Context) schema.Schema {
 							},
 						}},
 					},
-					"raw_json": schema.StringAttribute{Computed: true, MarkdownDescription: "Full, unparsed JSON payload of the period."},
+					"raw_json": schema.StringAttribute{Computed: true, MarkdownDescription: "Redacted JSON payload of the period."},
 				}},
 			},
 		},
@@ -159,7 +159,7 @@ func readWorkspaceComputeUsage(ctx context.Context, client *nileapi.Client, data
 			TotalVCPUHours: types.Float64Value(p.TotalVCPUHours),
 			Start:          stringOrNull(p.Start),
 			End:            stringOrNull(p.End),
-			Raw:            types.StringValue(string(p.Raw)),
+			Raw:            redactedRawJSON(p.Raw),
 		}
 		if p.ChartData != nil {
 			period.MaxCPUCount = types.Int64Value(p.ChartData.MaxCPUCount)

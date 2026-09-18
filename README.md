@@ -116,10 +116,11 @@ documented under [`docs/`](docs/).
 - **Passwords and invite codes.** The API returns credential passwords and
   programmatic invite codes exactly once. They are stored as sensitive values
   in state and are never cleared by a refresh.
-- **`raw_json`.** Most data sources expose the complete API payload as
+- **`raw_json`.** Most data sources expose the API payload as
   `raw_json`, so fields introduced by the Nile API in the future remain
   accessible via `jsondecode()` even before the provider promotes them to
-  typed attributes.
+  typed attributes. Common secret fields (passwords, tokens, secrets, invite
+  codes) are replaced with `[REDACTED]` before the payload reaches state.
 - **Retries.** Transient failures — HTTP `408`, `429`, `5xx`, and network
   errors — are retried up to three times with exponential backoff and jitter.
   A `Retry-After` header takes precedence (capped at 30 seconds). Only

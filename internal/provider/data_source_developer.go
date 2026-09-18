@@ -37,7 +37,7 @@ func developerDataSourceSchema(_ context.Context) schema.Schema {
 	attrs := developerAttributes()
 	attrs["raw_json"] = schema.StringAttribute{
 		Computed:            true,
-		MarkdownDescription: "Full, unparsed JSON payload of the developer as returned by the API.",
+		MarkdownDescription: "Redacted JSON payload of the developer as returned by the API.",
 	}
 	attrs["id"] = schema.StringAttribute{
 		Computed:            true,
@@ -66,5 +66,5 @@ func readDeveloper(ctx context.Context, client *nileapi.Client, data *developerD
 	data.Kind = m.Kind
 	data.Workspaces = m.Workspaces
 	data.Databases = m.Databases
-	data.Raw = types.StringValue(string(dev.Raw))
+	data.Raw = redactedRawJSON(dev.Raw)
 }

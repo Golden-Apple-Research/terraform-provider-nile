@@ -119,9 +119,18 @@ func redactJSONSecrets(value any) {
 func isSensitiveJSONKey(key string) bool {
 	normalized := strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(key))
 	switch normalized {
-	case "password", "code", "secret", "claimcode", "token", "accesstoken", "refreshtoken", "apitoken", "clientsecret":
+	case "password", "passwd", "code", "claimcode", "secret", "secretkey",
+		"apikey", "privatekey", "accesstoken", "refreshtoken", "apitoken",
+		"idtoken", "sessiontoken", "clientsecret", "authorization", "bearer":
 		return true
-	default:
-		return false
 	}
+	// Substring and suffix checks catch qualified names such as "dbPassword",
+	// "clientSecret" or "webhookToken" in addition to the exact spellings
+	// above, without redacting unrelated fields.
+	return strings.Contains(normalized, "password") ||
+		strings.Contains(normalized, "passwd") ||
+		strings.Contains(normalized, "secret") ||
+		strings.HasSuffix(normalized, "token") ||
+		strings.HasSuffix(normalized, "apikey") ||
+		strings.HasSuffix(normalized, "privatekey")
 }

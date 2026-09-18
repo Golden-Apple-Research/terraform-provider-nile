@@ -30,6 +30,6 @@ data "nile_database_error_insights" "example" {
     - `error_count` - (Computed) Errors observed in the bucket.
     - `source` - (Computed) Reporter (`source` in the API response).
     - `timestamp` - (Computed) Bucket timestamp.
-  - `raw_json` - (Computed) Full, unparsed JSON payload of the response as returned by the API.
+  - `raw_json` - (Computed) Redacted JSON payload of the response as returned by the API.
   - `start` - (Optional) RFC3339 timestamp marking the start of the metrics window (`start` query parameter).
 
