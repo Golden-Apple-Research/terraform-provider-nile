@@ -94,8 +94,25 @@ reporter credit may be included at our sole discretion. As a courtesy, we
 ask for a reasonable disclosure window before any public disclosure, but
 this request itself creates no obligation on either side.
 
-Good-faith research that respects user data and service availability is
-appreciated.
+### Good-faith research (non-binding statement of intent)
+
+To be as permissive as we can be: we do not intend to pursue legal action,
+claims, or complaints against anyone for good-faith security research on
+this project's code. Running it locally, inspecting it, and probing it
+against your own test setups is exactly the kind of scrutiny free software
+benefits from, and we welcome it.
+
+So that this stays a welcome mat and does not become a liability trap, note:
+
+- This is a **statement of intent only**. It is not a contract, not a
+  waiver, not an authorization, and not a guarantee; it creates no legal
+  obligations, expectations, or safe-harbor rights, and it may be revised or
+  withdrawn at any time.
+- It is limited to research on **this codebase and your own local
+  environments**. It does not authorize testing the Nile service or any
+  other third-party system (their rules apply), and it does not extend to
+  activity that violates applicable law, accesses other people's data, or
+  degrades services.
 
 ## Version handling
 
