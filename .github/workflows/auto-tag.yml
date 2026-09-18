@@ -1,0 +1,82 @@
+name: Auto-tag
+
+# Conventional-commit driven version tagging: merges to main that contain
+# `feat:` commits bump the minor version, `fix:` commits bump the patch
+# version, breaking changes (`feat!:`/`fix!:` or `BREAKING CHANGE:` footer)
+# bump the major version (or minor while pre-1.0). Everything else
+# (docs:, chore:, refactor:, ...) does not create a release.
+#
+# The pushed tag triggers the Release workflow. Tags pushed by the built-in
+# GITHUB_TOKEN do not trigger other workflows, so a PAT with contents:write
+# (secret RELEASE_TOKEN) is required to push the tag.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    name: Create version tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Determine next version from conventional commits
+        id: semver
+        run: |
+          set -eu
+          git fetch --tags
+          latest=$(git tag -l 'v*' | sort -V | tail -n1)
+          if [ -n "$latest" ]; then
+            range="${latest}..HEAD"
+            major="${latest#v}"; major="${major%%.*}"
+            minor=$(echo "${latest#v}" | cut -d. -f2)
+            patch=$(echo "${latest#v}" | cut -d. -f3)
+          else
+            range="HEAD"
+            major=0; minor=0; patch=0
+          fi
+          log=$(git log --format='%s%n%b---' "$range")
+
+          bump=none
+          if grep -qE '^[a-z]+(\([^)]*\))?!:' <<<"$log" || grep -q 'BREAKING CHANGE:' <<<"$log"; then
+            bump=major
+          elif grep -qE '^feat(\([^)]*\))?:' <<<"$log"; then
+            bump=minor
+          elif grep -qE '^fix(\([^)]*\))?:' <<<"$log"; then
+            bump=patch
+          fi
+
+          case "$bump" in
+            major)
+              if [ "$major" -eq 0 ]; then
+                # pre-1.0: breaking changes bump the minor version
+                next="v0.$((minor + 1)).0"
+              else
+                next="v$((major + 1)).0.0"
+              fi
+              ;;
+            minor) next="v${major}.$((minor + 1)).0" ;;
+            patch) next="v${major}.${minor}.$((patch + 1))" ;;
+            none)
+              echo "No feat/fix commits since ${latest:-the beginning}; not tagging."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+
+          echo "previous tag: ${latest:-none} ($range, bump: $bump) -> creating $next"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Push tag
+        if: steps.semver.outputs.skip != 'true'
+        run: |
+          git config user.name "release-bot"
+          git config user.email "release-bot@users.noreply.github.com"
+          git tag "${{ steps.semver.outputs.next }}"
+          git push origin "${{ steps.semver.outputs.next }}"

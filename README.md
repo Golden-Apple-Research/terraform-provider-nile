@@ -246,13 +246,39 @@ All resources support `terraform import`: a `nile_database` is imported as
 `workspace_slug/database_name/credential_id` and a `nile_developer_invite` as
 `workspace_slug/invite_id`.
 
+## Installation
+
+The provider is published on the public Terraform Registry under
+`golden-apple-research/nile`:
+
+```hcl
+terraform {
+  required_providers {
+    nile = {
+      source  = "golden-apple-research/nile"
+      version = "~> 0.1"
+    }
+  }
+}
+```
+
+`terraform init` then downloads a signed release binary for the current
+platform.
+
 ## Development
 
-Building and testing the provider requires Go ≥ 1.25 and Terraform ≥ 1.5; the
+Building and testing the provider requires Go ≥ 1.27 and Terraform ≥ 1.5; the
 smoke test additionally needs Python 3. The common tasks are available through
 `make`: `make build` builds the provider binary into `bin/`, `make test` runs
 the unit tests, `make vet` runs `go vet`, and `make smoke` runs an end-to-end
-test against a local mock API.
+test against a local mock API. `make docs` regenerates the registry
+documentation under `docs/` (served by the Terraform Registry from the tagged
+release). Releasing is handled by
+[`.github/workflows/release.yml`](.github/workflows/release.yml): pushing a
+`vX.Y.Z` tag builds the multi-platform archives, signs the checksums with the
+release GPG key, and publishes the GitHub release that the Terraform Registry
+imports.
+
 
 ### Local development with `dev_overrides`
 
