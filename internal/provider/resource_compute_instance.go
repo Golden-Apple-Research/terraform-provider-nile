@@ -199,6 +199,11 @@ func (r *computeInstanceResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
+	// Record the remote object before waiting. A later timeout must not
+	// orphan an instance that the API already created.
+	applyComputeInstanceResource(&plan, instance, workspaceSlug, databaseName, name)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+
 	if !instance.Ready() {
 		instance, err = r.client.WaitForComputeInstanceReady(ctx, workspaceSlug, databaseName, instance.ID)
 		if err != nil {
@@ -209,10 +214,9 @@ func (r *computeInstanceResource) Create(ctx context.Context, req resource.Creat
 			)
 			return
 		}
+		applyComputeInstanceResource(&plan, instance, workspaceSlug, databaseName, name)
+		resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 	}
-
-	applyComputeInstanceResource(&plan, instance, workspaceSlug, databaseName, name)
-	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 func (r *computeInstanceResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -291,6 +295,14 @@ func (r *computeInstanceResource) Update(ctx context.Context, req resource.Updat
 		)
 		return
 	}
+
+	// The update was accepted. Keep computed fields from prior state and
+	// persist the planned name/size so a wait timeout does not roll identity
+	// back to the pre-update values.
+	state.InstanceName = plan.InstanceName
+	state.InstanceSize = plan.InstanceSize
+	state.Timeouts = plan.Timeouts
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 
 	// Renames complete quickly, resizes take longer; wait for the instance to
 	// settle before reporting success.

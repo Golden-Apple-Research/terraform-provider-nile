@@ -36,6 +36,7 @@ resource "nile_database" "example" {
   - `status` - (Computed) Database status (`PENDING`, `REQUESTED`, `BUILT`, `POOLED` or `READY`).
   - `timeouts` - (Optional) Timeouts for asynchronous operations. Unspecified operations use the default of `20m`.
     - `create` - (Optional) Time to wait for the resource to be created and become ready. Defaults to `20m`.
+    - `delete` - (Optional) Time to wait for the resource to be deleted. Defaults to `20m`.
     - `update` - (Optional) Time to wait for the resource update to settle. Defaults to `20m`.
 
 ## Import

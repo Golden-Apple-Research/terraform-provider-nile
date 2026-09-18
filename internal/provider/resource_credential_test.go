@@ -5,12 +5,14 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 
 	"github.com/Golden-Apple-Research/nile-terraform/internal/nileapi"
@@ -105,6 +107,10 @@ func TestCredentialResourceCreateWithoutPassword(t *testing.T) {
 	if !resp.Diagnostics.HasError() {
 		t.Fatal("expected an error when the create response has no password")
 	}
+	// The remote credential exists; it must be in state so Terraform can destroy it.
+	if got := stateString(t, resp.State, "id"); got != "cred-1" {
+		t.Errorf("id = %q, want the created credential recorded in state", got)
+	}
 }
 
 func TestCredentialResourceCreateWithoutID(t *testing.T) {
@@ -122,7 +128,7 @@ func TestCredentialResourceCreateWithoutID(t *testing.T) {
 
 func TestCredentialResourceRead(t *testing.T) {
 	client := credentialAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`[{"id":"cred-1","tenant":"acme","internal":true}]`))
+		_, _ = w.Write([]byte(`[{"id":"cred-1","tenant":"acme","internal":true,"password":"********"}]`))
 	})
 	res := configuredCredentialResource(t, client)
 
@@ -138,7 +144,7 @@ func TestCredentialResourceRead(t *testing.T) {
 	if resp.Diagnostics.HasError() {
 		t.Fatalf("read diagnostics: %v", resp.Diagnostics)
 	}
-	// The password is never returned again; the stored value must survive.
+	// A non-empty (masked) password in the list response must not clobber state.
 	if got := stateString(t, resp.State, "password"); got != "stored" {
 		t.Errorf("password = %q, want the value kept in state", got)
 	}
@@ -212,5 +218,23 @@ func TestApplyCredentialResourceMapsInternalWithoutDatabase(t *testing.T) {
 	}
 	if !model.Password.IsNull() {
 		t.Errorf("password = %q, want null", model.Password)
+	}
+}
+
+func TestApplyCredentialResourcePreservesSecretsAndOmittedInternal(t *testing.T) {
+	model := &databaseCredentialResourceModel{
+		Internal: types.BoolValue(true),
+		Password: types.StringValue("stored"),
+	}
+	applyCredentialResource(model, nileapi.Credential{
+		ID:       "cred-1",
+		Password: "********",
+		Raw:      json.RawMessage(`{"id":"cred-1"}`),
+	}, "ws", "db")
+	if model.Password.ValueString() != "stored" {
+		t.Errorf("password = %q, want stored", model.Password.ValueString())
+	}
+	if !model.Internal.ValueBool() {
+		t.Fatal("omitted internal should keep the previous value")
 	}
 }

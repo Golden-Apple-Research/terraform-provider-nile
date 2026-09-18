@@ -25,7 +25,7 @@ resource "nile_developer_invite" "example" {
   - `workspace_slug` - (Required) Slug of the workspace to invite the developer to. Changing it forces replacement.
 
 ## Attribute Reference
-  - `code` - (Computed, Sensitive) Invite code, only returned when `programmatic = true`.
+  - `code` - (Computed, Sensitive) Invite code, only returned when `programmatic = true`. Stored in state at creation and never copied from later API responses.
   - `created` - (Computed) Creation timestamp.
   - `id` - (Computed) Invite identifier.
   - `programmatic` - (Optional, Computed) If true, the API returns an invite code instead of only sending an email. Changing it forces replacement.

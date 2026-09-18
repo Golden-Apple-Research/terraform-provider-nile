@@ -180,6 +180,7 @@ func TestDeveloperInviteResourceRead(t *testing.T) {
 			"workspace_slug": stringAttr("acme"),
 			"id":             stringAttr("inv-1"),
 			"email":          stringAttr("b@example.com"),
+			"code":           stringAttr("stored-code"),
 		}),
 	}, &resp)
 	if resp.Diagnostics.HasError() {
@@ -188,8 +189,11 @@ func TestDeveloperInviteResourceRead(t *testing.T) {
 	if got := stateString(t, resp.State, "verification_state"); got != "EMAIL_SENT" {
 		t.Errorf("verification_state = %q", got)
 	}
-	// A code that only exists in state (imported resources) is kept as-is;
-	// here the API returned one, and it must not leak into raw_json.
+	// A one-time code in state must not be replaced by a later API value.
+	if got := stateString(t, resp.State, "code"); got != "stored-code" {
+		t.Errorf("code = %q, want the value kept in state", got)
+	}
+	// The API-returned code must not leak into raw_json either.
 	if got := stateString(t, resp.State, "raw_json"); strings.Contains(got, "secret") {
 		t.Errorf("raw_json = %s, want code redacted", got)
 	}

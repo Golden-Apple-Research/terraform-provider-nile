@@ -3,5 +3,15 @@ bin/
 .terraform.lock.hcl
 *.tfstate*
 crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.env
+.terraformrc
+terraform.rc
 .idea/
 .vscode/

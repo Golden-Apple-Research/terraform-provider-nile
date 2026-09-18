@@ -6,7 +6,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"regexp"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -14,9 +13,6 @@ import (
 
 	"github.com/Golden-Apple-Research/nile-terraform/internal/nileapi"
 )
-
-// monthRegexp matches a YYYY-MM month.
-var monthRegexp = regexp.MustCompile(`^\d{4}-(0[1-9]|1[0-2])$`)
 
 // NewDeveloperDataSource constructs the data source for the authenticated
 // developer.

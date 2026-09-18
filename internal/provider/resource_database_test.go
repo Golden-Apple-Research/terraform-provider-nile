@@ -52,7 +52,7 @@ func TestDatabaseResourceCreateTimeoutExpires(t *testing.T) {
 			"workspace_slug": stringAttr("ws"),
 			"name":           stringAttr("app"),
 			"region":         stringAttr("AWS_US_WEST_2"),
-			"timeouts":       timeoutsAttr(map[string]string{"create": "5ms", "update": ""}),
+			"timeouts":       timeoutsAttr(map[string]string{"create": "5ms", "update": "", "delete": ""}),
 		}),
 	}, &resp)
 	if !resp.Diagnostics.HasError() {
@@ -60,6 +60,11 @@ func TestDatabaseResourceCreateTimeoutExpires(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Errorf("create aborted after %v; the 5ms timeout was not honored", elapsed)
+	}
+	// The API already created the database; it must be in state so the next
+	// apply can refresh or destroy it instead of orphaning it.
+	if got := stateString(t, resp.State, "id"); got != "db-1" {
+		t.Errorf("id = %q, want the created database recorded in state", got)
 	}
 }
 
@@ -231,11 +236,17 @@ func TestDatabaseResourceUpdateSameNameSkipsAPI(t *testing.T) {
 }
 
 func TestDatabaseResourceDelete(t *testing.T) {
-	client := databaseAPIServer(t, func(w http.ResponseWriter, r *http.Request, _ int) {
-		if r.Method != http.MethodDelete {
-			t.Errorf("unexpected %s request", r.Method)
+	client := databaseAPIServer(t, func(w http.ResponseWriter, r *http.Request, calls int) {
+		switch {
+		case r.Method == http.MethodDelete:
+			_, _ = w.Write([]byte(`{"id":"db-1","name":"app","status":"DELETING"}`))
+		case r.Method == http.MethodGet && calls >= 2:
+			// The database has disappeared after the delete.
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"errorCode":"entity_not_found","statusCode":404}`))
+		default:
+			_, _ = w.Write([]byte(`{"id":"db-1","name":"app","status":"DELETING"}`))
 		}
-		_, _ = w.Write([]byte(`{"id":"db-1","name":"app","status":"READY"}`))
 	})
 	r := configuredDatabaseResource(t, client)
 
@@ -252,6 +263,38 @@ func TestDatabaseResourceDelete(t *testing.T) {
 	}
 	if !resp.State.Raw.IsNull() {
 		t.Errorf("state = %v, want removed", resp.State.Raw)
+	}
+}
+
+func TestDatabaseResourceDeleteTimeoutExpires(t *testing.T) {
+	client := databaseAPIServer(t, func(w http.ResponseWriter, r *http.Request, _ int) {
+		switch r.Method {
+		case http.MethodDelete:
+			_, _ = w.Write([]byte(`{"id":"db-1","name":"app","status":"DELETING"}`))
+		default:
+			// The database never disappears, so only the delete timeout can
+			// end the wait.
+			_, _ = w.Write([]byte(`{"id":"db-1","name":"app","status":"DELETING"}`))
+		}
+	})
+	client.WaitTimeout = 2 * time.Second
+	r := configuredDatabaseResource(t, client)
+
+	start := time.Now()
+	resp := resource.DeleteResponse{State: crudResponseState(t, r)}
+	r.Delete(context.Background(), resource.DeleteRequest{
+		State: stateWith(t, r, map[string]tftypes.Value{
+			"workspace_slug": stringAttr("ws"),
+			"name":           stringAttr("app"),
+			"id":             stringAttr("db-1"),
+			"timeouts":       timeoutsAttr(map[string]string{"create": "", "update": "", "delete": "5ms"}),
+		}),
+	}, &resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected an error when the delete timeout expires")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("delete aborted after %v; the 5ms timeout was not honored", elapsed)
 	}
 }
 

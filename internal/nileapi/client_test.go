@@ -555,3 +555,56 @@ func TestMapInstancesTypeMismatchKeepsRaw(t *testing.T) {
 		t.Errorf("Raw = %q", got[0].Raw)
 	}
 }
+
+func TestEndpointRejectsProtocolRelativeHijack(t *testing.T) {
+	c, err := NewClient("https://global.thenile.dev", "tok")
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	u := c.endpoint("", "attacker.com", "evil")
+	if u.Host != "global.thenile.dev" {
+		t.Fatalf("endpoint allowed protocol-relative host hijack: %s", u.String())
+	}
+}
+
+func TestNewClientAllowsLocalhostHTTP(t *testing.T) {
+	for _, rawURL := range []string{
+		"http://localhost",
+		"http://localhost:8080",
+		"http://LOCALHOST:12345",
+	} {
+		if _, err := NewClient(rawURL, "tok"); err != nil {
+			t.Errorf("expected localhost HTTP to be allowed, got error: %v", err)
+		}
+	}
+}
+
+func TestDecodeAPIErrorSanitizesErrorCode(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		payload string
+		want    string
+	}{
+		{
+			name:    "redacts secret",
+			payload: `{"errorCode":"secret_token_expired","message":"failed"}`,
+			want:    "[REDACTED]",
+		},
+		{
+			name:    "sanitizes newlines and spaces",
+			payload: "{\"errorCode\":\"invalid\\r\\ncode\\tfoo\",\"message\":\"failed\"}",
+			want:    "invalid  code foo",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := decodeAPIError(http.StatusBadRequest, []byte(tc.payload))
+			var apiErr *APIError
+			if !errors.As(err, &apiErr) {
+				t.Fatalf("expected *APIError, got %v", err)
+			}
+			if apiErr.ErrorCode != tc.want {
+				t.Errorf("errorCode = %q, want %q", apiErr.ErrorCode, tc.want)
+			}
+		})
+	}
+}

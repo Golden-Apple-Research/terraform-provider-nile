@@ -113,14 +113,17 @@ documented under [`docs/`](docs/).
   object reports `READY` before they complete, so dependent resources can be
   created in the same apply. Waiting is bounded: 20 minutes per operation by
   default (`Client.WaitTimeout`), with a poll every 5 seconds
-  (`Client.PollInterval`).
+  (`Client.PollInterval`). If waiting fails after the API has created (or
+  renamed) the object, the resource is still recorded in state so the next
+  apply can refresh or destroy it rather than orphaning it.
 - **Transport security.** The API URL must use HTTPS. Plain HTTP is accepted
   only for loopback test endpoints. Redirects are not followed, so the bearer
   token cannot be forwarded to a different endpoint.
 - **Passwords and invite codes.** The API returns credential passwords and
   programmatic invite codes exactly once. They are stored as sensitive values
-  in state and are never cleared by a refresh. Terraform state must therefore
-  use an encrypted backend with restricted access.
+  in state and are never copied from later API responses (including masked
+  values). Terraform state must therefore use an encrypted backend with
+  restricted access.
 - **`raw_json`.** Most data sources expose the API payload as
   `raw_json`, so fields introduced by the Nile API in the future remain
   accessible via `jsondecode()` even before the provider promotes them to

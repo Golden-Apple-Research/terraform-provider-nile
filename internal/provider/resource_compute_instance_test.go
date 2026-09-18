@@ -222,6 +222,11 @@ func TestComputeInstanceResourceCreateTimeoutExpires(t *testing.T) {
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Errorf("create aborted after %v; the 5ms timeout was not honored", elapsed)
 	}
+	// The API already created the instance; it must be in state so the next
+	// apply can refresh or destroy it instead of orphaning it.
+	if got := stateString(t, resp.State, "id"); got != "inst-1" {
+		t.Errorf("id = %q, want the created instance recorded in state", got)
+	}
 }
 
 func TestComputeInstanceResourceDeleteTimeoutExpires(t *testing.T) {

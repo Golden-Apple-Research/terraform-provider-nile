@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -15,6 +16,9 @@ import (
 
 	"github.com/Golden-Apple-Research/nile-terraform/internal/nileapi"
 )
+
+// monthRegexp matches a YYYY-MM month.
+var monthRegexp = regexp.MustCompile(`^\d{4}-(0[1-9]|1[0-2])$`)
 
 // --- nile_workspace_billing_readiness ---------------------------------------
 

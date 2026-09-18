@@ -136,6 +136,7 @@ func (r *databaseResource) Schema(ctx context.Context, _ resource.SchemaRequest,
 			"timeouts": timeouts.Attributes(ctx, timeouts.Opts{
 				Create: true,
 				Update: true,
+				Delete: true,
 			}),
 		},
 	}
@@ -192,6 +193,11 @@ func (r *databaseResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
+	// Record the remote object before waiting. A later timeout must not
+	// orphan a database that the API already created.
+	applyDatabaseResource(&plan, db, workspaceSlug, name)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+
 	// The create response may already be usable; otherwise wait until the
 	// database is ready so dependent resources (credentials, compute) can be
 	// created right away.
@@ -205,17 +211,15 @@ func (r *databaseResource) Create(ctx context.Context, req resource.CreateReques
 			)
 			return
 		}
+		applyDatabaseResource(&plan, db, workspaceSlug, name)
+		resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 	}
 	if db.ID == "" {
 		resp.Diagnostics.AddError(
 			"API returned no database identifier",
 			fmt.Sprintf("The create response for database %q in workspace %q did not contain an id.", name, workspaceSlug),
 		)
-		return
 	}
-
-	applyDatabaseResource(&plan, db, workspaceSlug, name)
-	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 func (r *databaseResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -295,6 +299,12 @@ func (r *databaseResource) Update(ctx context.Context, req resource.UpdateReques
 		)
 		return
 	}
+
+	// Persist the new name immediately: Read/Delete key off the name, so a
+	// later wait failure must not leave state pointing at the old name.
+	applyDatabaseResource(&plan, db, workspaceSlug, newName)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+
 	if !db.Ready() || db.ID == "" {
 		db, err = r.client.WaitForDatabaseReady(ctx, workspaceSlug, newName)
 		if err != nil {
@@ -305,17 +315,15 @@ func (r *databaseResource) Update(ctx context.Context, req resource.UpdateReques
 			)
 			return
 		}
+		applyDatabaseResource(&plan, db, workspaceSlug, newName)
+		resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 	}
 	if db.ID == "" {
 		resp.Diagnostics.AddError(
 			"API returned no database identifier",
 			fmt.Sprintf("The rename response for database %q in workspace %q did not contain an id.", newName, workspaceSlug),
 		)
-		return
 	}
-
-	applyDatabaseResource(&plan, db, workspaceSlug, newName)
-	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 func (r *databaseResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -329,6 +337,14 @@ func (r *databaseResource) Delete(ctx context.Context, req resource.DeleteReques
 		return
 	}
 
+	deleteTimeout, diags := state.Timeouts.Delete(ctx, nileapi.DefaultWaitTimeout)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, deleteTimeout)
+	defer cancel()
+
 	workspaceSlug := state.WorkspaceSlug.ValueString()
 	name := state.Name.ValueString()
 
@@ -339,6 +355,16 @@ func (r *databaseResource) Delete(ctx context.Context, req resource.DeleteReques
 			fmt.Sprintf("Could not delete database %q in workspace %q: %s", name, workspaceSlug, err.Error()),
 		)
 		return
+	}
+	if err == nil {
+		if err := r.client.WaitForDatabaseDeleted(ctx, workspaceSlug, name); err != nil {
+			resp.Diagnostics.AddError(
+				"Error waiting for database deletion",
+				fmt.Sprintf("Database %q in workspace %q was deleted but did not disappear: %s",
+					name, workspaceSlug, err.Error()),
+			)
+			return
+		}
 	}
 
 	resp.State.RemoveResource(ctx)

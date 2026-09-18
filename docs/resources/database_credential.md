@@ -31,7 +31,7 @@ resource "nile_database_credential" "example" {
   - `db_host` - (Computed) Host of the database's PostgreSQL endpoint, if provisioned.
   - `id` - (Computed) Credential identifier.
   - `internal` - (Optional, Computed) Whether to create an internal credential (`internal` query parameter). Changing it forces replacement.
-  - `password` - (Computed, Sensitive) Password of the credential. The API returns it only once, at creation time; it is stored in state and never refreshed.
+  - `password` - (Computed, Sensitive) Password of the credential. The API returns it only once, at creation time; it is stored in state and never copied from later API responses.
   - `raw_json` - (Computed, Sensitive) Redacted JSON payload of the credential as returned by the API.
   - `tenant_id` - (Optional, Computed) Tenant the credential is scoped to (`tenantId` query parameter). Changing it forces replacement.
 

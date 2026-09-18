@@ -49,8 +49,13 @@ jobs:
             exit 1
           fi
 
+      - name: verify generated docs
+        run: |
+          go run ./tools/gendocs
+          git diff --exit-code docs/
+
       - name: go test
-        run: go test ./... -v
+        run: go test ./... -v -race
 
   smoke:
     name: Smoke test (mock API)

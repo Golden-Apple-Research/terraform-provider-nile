@@ -86,6 +86,7 @@ func (r *developerInviteResource) Schema(_ context.Context, _ resource.SchemaReq
 				Computed: true,
 				PlanModifiers: []planmodifier.Bool{
 					boolplanmodifier.RequiresReplace(),
+					boolplanmodifier.UseStateForUnknown(),
 				},
 				MarkdownDescription: "If true, the API returns an invite code instead of only sending an email. " +
 					"Changing it forces replacement.",
@@ -99,9 +100,13 @@ func (r *developerInviteResource) Schema(_ context.Context, _ resource.SchemaReq
 				MarkdownDescription: "Verification state (`EMAIL_PENDING`, `EMAIL_SENT`, `VERIFIED` or `EXPIRED`).",
 			},
 			"code": schema.StringAttribute{
-				Computed:            true,
-				Sensitive:           true,
-				MarkdownDescription: "Invite code, only returned when `programmatic = true`.",
+				Computed:  true,
+				Sensitive: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+				MarkdownDescription: "Invite code, only returned when `programmatic = true`. " +
+					"Stored in state at creation and never copied from later API responses.",
 			},
 			"sender_email": schema.StringAttribute{
 				Computed:            true,
@@ -179,6 +184,9 @@ func (r *developerInviteResource) Create(ctx context.Context, req resource.Creat
 
 	plan.Programmatic = types.BoolValue(programmatic)
 	applyInviteResource(&plan, invite, workspaceSlug)
+	if invite.Code != "" {
+		plan.Code = types.StringValue(invite.Code)
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -296,8 +304,9 @@ func (r *developerInviteResource) findInviteByEmail(ctx context.Context, workspa
 	return matches[0], nil
 }
 
-// applyInviteResource merges an API invite into the model. Programmatic is a
-// create-only input and is left untouched, so imports do not invent a value.
+// applyInviteResource merges an API invite into the model. Programmatic and
+// code are create-only and are left untouched, so a refresh cannot clobber a
+// one-time invite code and imports do not invent a programmatic value.
 func applyInviteResource(m *developerInviteResourceModel, invite nileapi.DeveloperInvite, workspaceSlug string) {
 	m.WorkspaceSlug = types.StringValue(workspaceSlug)
 	if invite.ID != "" {
@@ -308,9 +317,6 @@ func applyInviteResource(m *developerInviteResourceModel, invite nileapi.Develop
 	}
 	if invite.VerificationState != "" {
 		m.VerificationState = types.StringValue(invite.VerificationState)
-	}
-	if invite.Code != "" {
-		m.Code = types.StringValue(invite.Code)
 	}
 	if invite.Sender != nil && invite.Sender.Email != "" {
 		m.SenderEmail = types.StringValue(invite.Sender.Email)

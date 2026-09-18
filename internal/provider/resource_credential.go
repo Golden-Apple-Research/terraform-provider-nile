@@ -98,6 +98,7 @@ func (r *databaseCredentialResource) Schema(_ context.Context, _ resource.Schema
 				Computed: true,
 				PlanModifiers: []planmodifier.Bool{
 					boolplanmodifier.RequiresReplace(),
+					boolplanmodifier.UseStateForUnknown(),
 				},
 				MarkdownDescription: "Whether to create an internal credential (`internal` query parameter). " +
 					"Changing it forces replacement.",
@@ -109,8 +110,11 @@ func (r *databaseCredentialResource) Schema(_ context.Context, _ resource.Schema
 			"password": schema.StringAttribute{
 				Computed:  true,
 				Sensitive: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 				MarkdownDescription: "Password of the credential. The API returns it only once, at creation time; " +
-					"it is stored in state and never refreshed.",
+					"it is stored in state and never copied from later API responses.",
 			},
 			"api_host": schema.StringAttribute{
 				Computed:            true,
@@ -182,18 +186,22 @@ func (r *databaseCredentialResource) Create(ctx context.Context, req resource.Cr
 		)
 		return
 	}
+
+	// Persist as soon as the remote object exists so a missing password still
+	// leaves Terraform able to destroy the credential instead of orphaning it.
+	applyCredentialResource(&plan, credential, workspaceSlug, databaseName)
+	if credential.Password != "" {
+		plan.Password = types.StringValue(credential.Password)
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 	if credential.Password == "" {
 		resp.Diagnostics.AddError(
 			"API returned no credential password",
 			fmt.Sprintf("The create response for database %q in workspace %q did not contain a password. "+
-				"The credential exists, but Terraform cannot store its password; delete it and create a new one.",
+				"The credential exists and is recorded in state without a password; delete it and create a new one.",
 				databaseName, workspaceSlug),
 		)
-		return
 	}
-
-	applyCredentialResource(&plan, credential, workspaceSlug, databaseName)
-	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 func (r *databaseCredentialResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -295,21 +303,22 @@ func (r *databaseCredentialResource) ImportState(ctx context.Context, req resour
 }
 
 // applyCredentialResource merges an API credential into the model. Password is
-// never cleared: the API only returns it once, so a refresh must keep the
-// value already in state.
+// create-only and is left untouched: a refresh must not copy a masked or
+// empty value over the one-time secret already in state.
 func applyCredentialResource(m *databaseCredentialResourceModel, credential nileapi.Credential, workspaceSlug, databaseName string) {
 	m.WorkspaceSlug = types.StringValue(workspaceSlug)
 	m.DatabaseName = types.StringValue(databaseName)
 	if credential.ID != "" {
 		m.ID = types.StringValue(credential.ID)
 	}
-	if credential.Password != "" {
-		m.Password = types.StringValue(credential.Password)
-	}
 	if credential.Tenant != "" {
 		m.TenantID = types.StringValue(credential.Tenant)
 	}
-	m.Internal = types.BoolValue(credential.Internal)
+	if apiFieldPresent(credential.Raw, "internal") {
+		m.Internal = types.BoolValue(credential.Internal)
+	} else if m.Internal.IsUnknown() {
+		m.Internal = types.BoolNull()
+	}
 	if credential.Database != nil {
 		if credential.Database.APIHost != "" {
 			m.APIHost = types.StringValue(credential.Database.APIHost)

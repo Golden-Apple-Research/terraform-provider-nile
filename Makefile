@@ -17,7 +17,7 @@ install: build
 	cp $(OUT_DIR)/$(BINARY)_v$(VERSION) ~/.terraform.d/plugins/registry.terraform.io/golden-apple-research/nile/$(VERSION)/$(OS_ARCH)/
 
 test:
-	go test ./... -v
+	go test ./... -v -race
 
 fmt:
 	gofmt -w .

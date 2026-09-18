@@ -717,6 +717,39 @@ func TestWaitForDatabaseReadyNotFoundThenFound(t *testing.T) {
 	}
 }
 
+func TestWaitForDatabaseReadyFailsOnTerminalStatus(t *testing.T) {
+	srv, _ := captureServer(t, 200, `{"id":"db-1","name":"app","status":"FAILED"}`)
+	c := testClient(t, srv)
+
+	_, err := c.WaitForDatabaseReady(t.Context(), "ws", "app")
+	if err == nil || !strings.Contains(err.Error(), "FAILED") {
+		t.Fatalf("expected terminal-status error, got %v", err)
+	}
+}
+
+func TestWaitForDatabaseDeleted(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch calls.Add(1) {
+		case 1:
+			_, _ = w.Write([]byte(`{"id":"db-1","name":"app","status":"DELETING"}`))
+		case 2:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"errorCode":"entity_not_found"}`))
+		}
+	}))
+	defer srv.Close()
+
+	c := testClient(t, srv)
+	c.PollInterval = time.Millisecond
+	if err := c.WaitForDatabaseDeleted(t.Context(), "ws", "app"); err != nil {
+		t.Fatalf("WaitForDatabaseDeleted: %v", err)
+	}
+	if calls.Load() != 2 {
+		t.Errorf("calls = %d, want 2", calls.Load())
+	}
+}
+
 func TestWaitForComputeInstanceReadyFails(t *testing.T) {
 	srv, _ := captureServer(t, 200, `{"instanceId":"inst-1","status":"FAILED"}`)
 	c := testClient(t, srv)

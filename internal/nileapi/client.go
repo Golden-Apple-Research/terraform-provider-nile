@@ -122,6 +122,9 @@ func NewClient(baseURL, authToken string) (*Client, error) {
 }
 
 func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
 }
@@ -179,16 +182,15 @@ func ErrorCode(err error) string {
 // individually so that characters like "/" inside a workspace slug or database
 // name cannot change the request path. Dot segments are percent-encoded too:
 // url.Parse otherwise normalizes "." and ".." while resolving the reference.
+// The resolved reference is guarded to never allow protocol-relative references
+// (e.g. "//host") to alter the authority/host of BaseURL.
 func (c *Client) endpoint(segments ...string) *url.URL {
 	escaped := make([]string, len(segments))
 	for i, s := range segments {
 		escaped[i] = escapePathSegment(s)
 	}
-	// escapePathSegment never emits characters that make url.Parse fail, so the
-	// error branch is unreachable; returning the base URL keeps the signature
-	// free of an error that callers cannot handle meaningfully.
 	rel, err := url.Parse("/" + strings.Join(escaped, "/"))
-	if err != nil {
+	if err != nil || rel.Host != "" || rel.Scheme != "" {
 		return c.BaseURL
 	}
 	return c.BaseURL.ResolveReference(rel)
@@ -283,10 +285,13 @@ func (c *Client) requestWithAuth(ctx context.Context, method string, u *url.URL,
 	if err != nil {
 		return err
 	}
-	payload, readErr := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	payload, readErr := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	resp.Body.Close()
 	if readErr != nil {
 		return fmt.Errorf("reading response body: %w", readErr)
+	}
+	if len(payload) > maxResponseBytes {
+		return fmt.Errorf("response body from %s exceeded %d MiB limit", safeRequestPath(u), maxResponseBytes/(1<<20))
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
@@ -337,6 +342,7 @@ func decodeAPIError(status int, payload []byte) error {
 	var apiErr APIError
 	if err := json.Unmarshal(payload, &apiErr); err == nil && (apiErr.ErrorCode != "" || apiErr.Message != "") {
 		apiErr.StatusCode = status
+		apiErr.ErrorCode = safeAPIErrorCode(apiErr.ErrorCode)
 		apiErr.Message = safeAPIErrorMessage(apiErr.Message)
 		return &apiErr
 	}
@@ -350,6 +356,23 @@ func safeRequestPath(u *url.URL) string {
 		return "/"
 	}
 	return u.EscapedPath()
+}
+
+func safeAPIErrorCode(code string) string {
+	code = strings.TrimSpace(strings.NewReplacer("\r", " ", "\n", " ", "\t", " ").Replace(code))
+	if code == "" {
+		return ""
+	}
+	normalized := strings.ToLower(strings.NewReplacer("_", "", "-", "", " ", "").Replace(code))
+	for _, marker := range []string{
+		"password", "passwd", "secret", "token", "apikey", "privatekey",
+		"authorization", "bearer", "connectionstring", "dsn", "databaseurl", "databaseuri",
+	} {
+		if strings.Contains(normalized, marker) {
+			return "[REDACTED]"
+		}
+	}
+	return truncate([]byte(code), 64)
 }
 
 func safeAPIErrorMessage(message string) string {
@@ -536,7 +559,7 @@ func (c *Client) waitContext(ctx context.Context) (context.Context, context.Canc
 
 // WaitForDatabaseReady polls GetDatabase until the database reaches READY
 // (or the API reports no status). It fails when the wait exceeds the caller's
-// deadline or WaitTimeout.
+// deadline or WaitTimeout, or if the database enters a terminal failure status.
 func (c *Client) WaitForDatabaseReady(ctx context.Context, workspaceSlug, databaseName string) (Database, error) {
 	ctx, cancel := c.waitContext(ctx)
 	defer cancel()
@@ -544,8 +567,14 @@ func (c *Client) WaitForDatabaseReady(ctx context.Context, workspaceSlug, databa
 	for {
 		db, err := c.GetDatabase(ctx, workspaceSlug, databaseName)
 		switch {
-		case err == nil && databaseReady(db.Status):
-			return db, nil
+		case err == nil:
+			switch db.Status {
+			case "READY":
+				return db, nil
+			case "FAILED", "TERMINATED", "ERROR", "DELETED":
+				return db, fmt.Errorf("database %q in workspace %q entered terminal status %s",
+					databaseName, workspaceSlug, db.Status)
+			}
 		case err != nil && ctx.Err() != nil:
 			return Database{}, fmt.Errorf("waiting for database %q in workspace %q: %w", databaseName, workspaceSlug, ctx.Err())
 		case err != nil && !IsNotFound(err):
@@ -558,6 +587,36 @@ func (c *Client) WaitForDatabaseReady(ctx context.Context, workspaceSlug, databa
 		})
 		if err := sleepWithContext(ctx, interval); err != nil {
 			return Database{}, fmt.Errorf("waiting for database %q in workspace %q: %w", databaseName, workspaceSlug, err)
+		}
+	}
+}
+
+// WaitForDatabaseDeleted polls GetDatabase until the database is gone (404)
+// or reports a terminal deleted status.
+func (c *Client) WaitForDatabaseDeleted(ctx context.Context, workspaceSlug, databaseName string) error {
+	ctx, cancel := c.waitContext(ctx)
+	defer cancel()
+	interval := c.pollInterval()
+	for {
+		db, err := c.GetDatabase(ctx, workspaceSlug, databaseName)
+		switch {
+		case IsNotFound(err):
+			return nil
+		case ctx.Err() != nil:
+			return fmt.Errorf("waiting for database %q in workspace %q to be deleted: %w", databaseName, workspaceSlug, ctx.Err())
+		case err != nil:
+			return err
+		case db.Status == "TERMINATED" || db.Status == "DELETED" || db.Deleted != "":
+			return nil
+		}
+		tflog.Debug(ctx, "waiting for database to be deleted", map[string]any{
+			"workspace": workspaceSlug,
+			"database":  databaseName,
+			"status":    db.Status,
+		})
+		if err := sleepWithContext(ctx, interval); err != nil {
+			return fmt.Errorf("waiting for database %q in workspace %q to be deleted: %w",
+				databaseName, workspaceSlug, err)
 		}
 	}
 }
