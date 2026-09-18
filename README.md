@@ -7,6 +7,13 @@ manage Nile databases, dedicated compute instances, database credentials and
 developer access to workspaces declaratively from Terraform, instead of
 through the Nile console or ad-hoc API calls.
 
+> [!NOTE]
+> This is an independent, community-maintained project by
+> [Golden Apple Research](https://github.com/Golden-Apple-Research). It is
+> not developed by, affiliated with, sponsored by or endorsed by
+> Nile (thenile.dev). "Nile" and the Nile product names are trademarks of
+> their respective owners; this project simply builds on their public API.
+
 The provider configuration, every resource and data source, and the behaviour
 notes below are documented in detail under [`docs/index.md`](docs/index.md).
 
@@ -276,13 +283,14 @@ where `terraform init` picks it up without any CLI configuration. Note that
 the configuration (the examples use `~> 0.1`); the default `VERSION=dev` is
 not installable.
 
+## Security
+
+Found a potential security issue? Please report it privately via the channels
+in [`SECURITY.md`](SECURITY.md). Note that the software is provided "AS IS"
+with no warranties; security handling is strictly voluntary and best-effort,
+with no guaranteed response or remedy.
+
 ## License
 
 This provider is licensed under the [European Union Public License, Version
 1.2](LICENSE) (SPDX identifier: `EUPL-1.2`).
-
-### Publishing
-
-The provider address `registry.terraform.io/golden-apple-research/nile`
-requires the GitHub repository to be named `terraform-provider-nile`
-(currently `nile-terraform`).
