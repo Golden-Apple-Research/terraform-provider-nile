@@ -132,6 +132,7 @@ func databaseAttributes() map[string]schema.Attribute {
 		},
 		"raw_json": schema.StringAttribute{
 			Computed:            true,
+			Sensitive:           true,
 			MarkdownDescription: "Redacted JSON payload of the database as returned by the API.",
 		},
 	}
@@ -390,6 +391,7 @@ func subscriptionAttributes() map[string]schema.Attribute {
 		},
 		"raw_json": schema.StringAttribute{
 			Computed:            true,
+			Sensitive:           true,
 			MarkdownDescription: "Redacted JSON payload of the subscription as returned by the API.",
 		},
 	}

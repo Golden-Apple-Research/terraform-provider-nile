@@ -17,11 +17,12 @@ import (
 )
 
 type requestCapture struct {
-	method      string
-	path        string
-	query       string
-	contentType string
-	body        string
+	method        string
+	path          string
+	query         string
+	contentType   string
+	authorization string
+	body          string
 }
 
 // captureServer serves a fixed response and records the request it received.
@@ -34,6 +35,7 @@ func captureServer(t *testing.T, status int, response string) (*httptest.Server,
 		cap.path = r.URL.EscapedPath()
 		cap.query = r.URL.RawQuery
 		cap.contentType = r.Header.Get("Content-Type")
+		cap.authorization = r.Header.Get("Authorization")
 		cap.body = string(body)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
@@ -70,6 +72,18 @@ func TestListDatabases(t *testing.T) {
 	}
 	if len(got[0].Raw) == 0 {
 		t.Error("Raw payload not preserved")
+	}
+}
+
+func TestEndpointEscapesDotSegments(t *testing.T) {
+	srv, cap := captureServer(t, 200, `[]`)
+	c := testClient(t, srv)
+
+	if _, err := c.ListDatabases(t.Context(), ".."); err != nil {
+		t.Fatalf("ListDatabases: %v", err)
+	}
+	if cap.path != "/workspaces/%2E%2E/databases" {
+		t.Fatalf("path = %q, want escaped dot segment", cap.path)
 	}
 }
 
@@ -157,6 +171,9 @@ func TestProvisionAndClaimDatabase(t *testing.T) {
 	}
 	if cap.method != http.MethodPost || cap.path != "/databases/provision" {
 		t.Errorf("request = %s %s", cap.method, cap.path)
+	}
+	if cap.authorization != "" {
+		t.Errorf("unauthenticated provision request carried Authorization header %q", cap.authorization)
 	}
 	if prov.ClaimCode != "code-1" {
 		t.Errorf("claim code = %q", prov.ClaimCode)
@@ -609,8 +626,8 @@ func TestErrorBodyWithoutAPIErrorShape(t *testing.T) {
 }
 
 func TestPostRetryPolicy(t *testing.T) {
-	// A 503 on POST must not be replayed (the request may have been
-	// processed); a 429 must be, including its body.
+	// Neither a 503 nor a 429 on POST may be replayed: the request may have
+	// been processed even when the server returns a transient error.
 	var calls atomic.Int32
 	var bodies []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -639,27 +656,18 @@ func TestPostRetryPolicy(t *testing.T) {
 	}
 
 	calls.Store(0)
-	bodies = nil
 	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		bodies = append(bodies, string(body))
-		if calls.Add(1) == 1 {
-			w.Header().Set("Retry-After", "0")
-			w.WriteHeader(http.StatusTooManyRequests)
-			return
-		}
-		_, _ = w.Write([]byte(`{"id":"db-1","name":"app","status":"READY"}`))
+		calls.Add(1)
+		w.Header().Set("Retry-After", "0")
+		w.WriteHeader(http.StatusTooManyRequests)
 	}))
 	defer srv2.Close()
 	c2 := testClient(t, srv2)
-	if _, err := c2.CreateDatabase(t.Context(), "ws", CreateDatabaseRequest{DatabaseName: "app", Region: "AWS_US_WEST_2"}); err != nil {
-		t.Fatalf("CreateDatabase after 429: %v", err)
+	if _, err := c2.CreateDatabase(t.Context(), "ws", CreateDatabaseRequest{DatabaseName: "app", Region: "AWS_US_WEST_2"}); err == nil {
+		t.Fatal("expected POST 429 to surface without retry")
 	}
-	if calls.Load() != 2 {
-		t.Fatalf("calls = %d, want 2 (POST is retried on 429)", calls.Load())
-	}
-	if bodies[0] != bodies[1] {
-		t.Errorf("retried body differs: %q vs %q", bodies[0], bodies[1])
+	if calls.Load() != 1 {
+		t.Fatalf("calls = %d, want 1 (POST is not retried on 429)", calls.Load())
 	}
 }
 

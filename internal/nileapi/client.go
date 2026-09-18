@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -52,9 +53,9 @@ type Client struct {
 	// UserAgent, when set, is sent as the User-Agent header on requests so
 	// the API can identify the provider.
 	UserAgent string
-	// MaxRetries is how often a transient failure (HTTP 408/429/5xx or a
-	// network error) is retried with exponential backoff. It defaults to 3;
-	// 0 disables retries.
+	// MaxRetries is how often a transient failure on a replay-safe request
+	// (HTTP 408/429/5xx or a network error) is retried with exponential
+	// backoff. It defaults to 3; 0 disables retries.
 	MaxRetries int
 	HTTP       *http.Client
 	// PollInterval is the delay between polls while waiting for an
@@ -73,27 +74,56 @@ func NewClient(baseURL, authToken string) (*Client, error) {
 	if authToken == "" {
 		return nil, fmt.Errorf("auth token must not be empty")
 	}
+	if strings.ContainsAny(authToken, "\r\n") {
+		return nil, fmt.Errorf("auth token must not contain newlines")
+	}
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
 	u, err := url.Parse(baseURL)
 	if err != nil {
-		return nil, fmt.Errorf("invalid base URL %q: %w", baseURL, err)
+		return nil, fmt.Errorf("invalid base URL: %w", err)
 	}
-	// Catch scheme mistakes (e.g. a bare "global.thenile.dev") here rather
-	// than at first request time with an opaque "unsupported protocol scheme"
-	// error from net/http.
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return nil, fmt.Errorf("invalid base URL %q: it must include an http:// or https:// scheme", baseURL)
+	// Production traffic must use TLS. Plain HTTP is accepted only for an
+	// explicit loopback endpoint, which keeps local mock-server tests possible
+	// without allowing a remote API URL to exfiltrate the bearer token.
+	u.Scheme = strings.ToLower(u.Scheme)
+	if u.Scheme != "https" && !(u.Scheme == "http" && isLoopbackHost(u.Hostname())) {
+		return nil, fmt.Errorf("invalid base URL: an HTTPS scheme is required (HTTP is allowed only for loopback test endpoints)")
+	}
+	if u.Host == "" {
+		return nil, fmt.Errorf("invalid base URL: host is required")
+	}
+	if u.User != nil {
+		return nil, fmt.Errorf("invalid base URL: user information is not allowed")
+	}
+	if u.RawQuery != "" || u.Fragment != "" {
+		return nil, fmt.Errorf("invalid base URL: query and fragment are not allowed")
+	}
+	if u.Path != "" && u.Path != "/" {
+		return nil, fmt.Errorf("invalid base URL: path prefixes are not supported")
 	}
 	return &Client{
-		BaseURL:      u,
-		AuthToken:    authToken,
-		MaxRetries:   defaultMaxRetries,
-		HTTP:         &http.Client{Timeout: 30 * time.Second},
+		BaseURL:    u,
+		AuthToken:  authToken,
+		MaxRetries: defaultMaxRetries,
+		HTTP: &http.Client{
+			Timeout: 30 * time.Second,
+			// The API is not expected to redirect. Returning the 3xx response
+			// prevents net/http from forwarding Authorization to another
+			// endpoint, including a different port on the same host.
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 		PollInterval: DefaultPollInterval,
 		WaitTimeout:  DefaultWaitTimeout,
 	}, nil
+}
+
+func isLoopbackHost(host string) bool {
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // APIError is a structured error returned by the Nile API. It implements
@@ -112,7 +142,7 @@ func (e *APIError) Error() string {
 	}
 	b.WriteString(")")
 	if e.Message != "" {
-		b.WriteString(": " + e.Message)
+		b.WriteString(": " + safeAPIErrorMessage(e.Message))
 	}
 	return b.String()
 }
@@ -147,13 +177,14 @@ func ErrorCode(err error) string {
 
 // endpoint builds an absolute URL from path segments, escaping every segment
 // individually so that characters like "/" inside a workspace slug or database
-// name cannot change the request path.
+// name cannot change the request path. Dot segments are percent-encoded too:
+// url.Parse otherwise normalizes "." and ".." while resolving the reference.
 func (c *Client) endpoint(segments ...string) *url.URL {
 	escaped := make([]string, len(segments))
 	for i, s := range segments {
-		escaped[i] = url.PathEscape(s)
+		escaped[i] = escapePathSegment(s)
 	}
-	// PathEscape never emits characters that make url.Parse fail, so the
+	// escapePathSegment never emits characters that make url.Parse fail, so the
 	// error branch is unreachable; returning the base URL keeps the signature
 	// free of an error that callers cannot handle meaningfully.
 	rel, err := url.Parse("/" + strings.Join(escaped, "/"))
@@ -161,6 +192,17 @@ func (c *Client) endpoint(segments ...string) *url.URL {
 		return c.BaseURL
 	}
 	return c.BaseURL.ResolveReference(rel)
+}
+
+func escapePathSegment(segment string) string {
+	switch segment {
+	case ".":
+		return "%2E"
+	case "..":
+		return "%2E%2E"
+	default:
+		return url.PathEscape(segment)
+	}
 }
 
 // withQuery adds non-empty key/value pairs to a URL's query string. Pairs are
@@ -198,6 +240,14 @@ func withBoolQuery(u *url.URL, key string, v *bool) *url.URL {
 // body may be nil, a url.Values (sent form-encoded, used by /oauth2/token), or
 // any value that is marshalled to JSON.
 func (c *Client) request(ctx context.Context, method string, u *url.URL, body, out any) error {
+	return c.requestWithAuth(ctx, method, u, body, out, true)
+}
+
+func (c *Client) requestWithoutAuth(ctx context.Context, method string, u *url.URL, body, out any) error {
+	return c.requestWithAuth(ctx, method, u, body, out, false)
+}
+
+func (c *Client) requestWithAuth(ctx context.Context, method string, u *url.URL, body, out any, authenticated bool) error {
 	var reader io.Reader
 	contentType := ""
 	switch b := body.(type) {
@@ -221,7 +271,9 @@ func (c *Client) request(ctx context.Context, method string, u *url.URL, body, o
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
-	req.Header.Set("Authorization", "Bearer "+c.AuthToken)
+	if authenticated {
+		req.Header.Set("Authorization", "Bearer "+c.AuthToken)
+	}
 	req.Header.Set("Accept", "application/json")
 	if c.UserAgent != "" {
 		req.Header.Set("User-Agent", c.UserAgent)
@@ -248,7 +300,7 @@ func (c *Client) request(ctx context.Context, method string, u *url.URL, body, o
 		return nil
 	}
 	if err := json.Unmarshal(payload, out); err != nil {
-		return fmt.Errorf("decoding response from %s: %w", u, err)
+		return fmt.Errorf("decoding response from %s: %w", safeRequestPath(u), err)
 	}
 	return nil
 }
@@ -261,6 +313,10 @@ func (c *Client) get(ctx context.Context, u *url.URL, out any) error {
 // post performs a POST request.
 func (c *Client) post(ctx context.Context, u *url.URL, body, out any) error {
 	return c.request(ctx, http.MethodPost, u, body, out)
+}
+
+func (c *Client) postUnauthenticated(ctx context.Context, u *url.URL, body, out any) error {
+	return c.requestWithoutAuth(ctx, http.MethodPost, u, body, out)
 }
 
 // put performs a PUT request.
@@ -281,9 +337,36 @@ func decodeAPIError(status int, payload []byte) error {
 	var apiErr APIError
 	if err := json.Unmarshal(payload, &apiErr); err == nil && (apiErr.ErrorCode != "" || apiErr.Message != "") {
 		apiErr.StatusCode = status
+		apiErr.Message = safeAPIErrorMessage(apiErr.Message)
 		return &apiErr
 	}
-	return fmt.Errorf("Nile API returned HTTP %d: %s", status, truncate(payload, 512))
+	// Do not copy arbitrary server response bytes into diagnostics. Error
+	// responses can contain reflected credentials or other sensitive data.
+	return fmt.Errorf("Nile API returned HTTP %d", status)
+}
+
+func safeRequestPath(u *url.URL) string {
+	if u == nil || u.EscapedPath() == "" {
+		return "/"
+	}
+	return u.EscapedPath()
+}
+
+func safeAPIErrorMessage(message string) string {
+	message = strings.TrimSpace(strings.NewReplacer("\r", " ", "\n", " ", "\t", " ").Replace(message))
+	if message == "" {
+		return ""
+	}
+	normalized := strings.ToLower(strings.NewReplacer("_", "", "-", "", " ", "").Replace(message))
+	for _, marker := range []string{
+		"password", "passwd", "secret", "token", "apikey", "privatekey",
+		"authorization", "bearer", "connectionstring", "dsn", "databaseurl", "databaseuri",
+	} {
+		if strings.Contains(normalized, marker) {
+			return "[REDACTED]"
+		}
+	}
+	return truncate([]byte(message), 256)
 }
 
 // doWithRetries executes req, retrying transient failures (rate limiting,
@@ -292,9 +375,8 @@ func decodeAPIError(status int, payload []byte) error {
 // never retried.
 //
 // Only replay-safe requests are retried after 5xx/network errors: GET, HEAD,
-// PUT, DELETE and OPTIONS. POST is retried on 429 only, because the server
-// rejected the request before processing it — a network failure or 5xx on a
-// POST is ambiguous and replaying it could create a duplicate resource.
+// PUT, DELETE and OPTIONS. POST is never retried: even a 429 response does not
+// universally guarantee that the server did not process the request.
 //
 // The returned response body is open and owned by the caller; bodies of
 // responses that are retried away are drained and closed here.
@@ -318,7 +400,7 @@ func (c *Client) doWithRetries(ctx context.Context, req *http.Request) (*http.Re
 			// Retrying after the caller gave up would be pointless (and
 			// http.Client already wraps the ctx error).
 			if ctx.Err() != nil || attempt == attempts-1 || !replayable {
-				return nil, fmt.Errorf("calling %s: %w", req.URL, err)
+				return nil, fmt.Errorf("calling %s: %w", safeRequestPath(req.URL), err)
 			}
 			if waitErr := c.sleepBackoff(ctx, attempt, nil); waitErr != nil {
 				return nil, waitErr
@@ -353,12 +435,8 @@ func idempotentMethod(method string) bool {
 }
 
 // retryableForMethod reports whether a response with the given status may be
-// retried for the request's method. 429 means the request was rejected before
-// being processed, so it is retryable for every method.
+// retried for the request's method. Non-idempotent methods are never retried.
 func retryableForMethod(method string, code int) bool {
-	if code == http.StatusTooManyRequests {
-		return true
-	}
 	return idempotentMethod(method) && retryableStatus(code)
 }
 
@@ -502,7 +580,7 @@ func (c *Client) WaitForComputeInstanceReady(ctx context.Context, workspaceSlug,
 		switch {
 		case err == nil:
 			switch instance.Status {
-			case "", "READY":
+			case "READY":
 				return instance, nil
 			case "FAILED", "TERMINATED":
 				return instance, fmt.Errorf("compute instance %q in database %q entered terminal status %s",

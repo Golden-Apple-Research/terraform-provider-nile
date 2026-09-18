@@ -40,7 +40,7 @@ data "nile_workspace_compute_usage" "example" {
       - `total_vcpu_hours` - (Computed) Total vCPU hours of the database.
     - `end` - (Computed) End of the period.
     - `max_cpu_count` - (Computed) Maximum CPU count in the chart data.
-    - `raw_json` - (Computed) Redacted JSON payload of the period.
+    - `raw_json` - (Computed, Sensitive) Redacted JSON payload of the period.
     - `start` - (Computed) Start of the period.
     - `total_vcpu_hours` - (Computed) Total vCPU hours in the period.
   - `start` - (Optional) RFC3339 timestamp marking the start of the usage window (`start` query parameter).

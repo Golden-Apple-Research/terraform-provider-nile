@@ -34,7 +34,7 @@ data "nile_database_uptime_insights" "example" {
     - `timestamp` - (Computed) Sample timestamp.
     - `uptime_percentage` - (Computed) Uptime percentage.
     - `uptime_seconds` - (Computed) Seconds of uptime.
-  - `raw_json` - (Computed) Redacted JSON payload of the response as returned by the API.
+  - `raw_json` - (Computed, Sensitive) Redacted JSON payload of the response as returned by the API.
   - `scope` - (Computed) Scope of the calculation (`scope` in the API response).
   - `source` - (Computed) Source of the samples (`source` in the API response).
   - `start` - (Optional) RFC3339 timestamp marking the start of the metrics window (`start` query parameter).

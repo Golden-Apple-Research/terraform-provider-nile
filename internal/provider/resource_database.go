@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -36,26 +37,27 @@ type databaseResource struct {
 }
 
 type databaseResourceModel struct {
-	WorkspaceSlug types.String `tfsdk:"workspace_slug"`
-	Name          types.String `tfsdk:"name"`
-	Region        types.String `tfsdk:"region"`
-	ID            types.String `tfsdk:"id"`
-	Status        types.String `tfsdk:"status"`
-	APIHost       types.String `tfsdk:"api_host"`
-	DBHost        types.String `tfsdk:"db_host"`
-	Expandable    types.Bool   `tfsdk:"expandable"`
-	Created       types.String `tfsdk:"created"`
-	Deleted       types.String `tfsdk:"deleted"`
-	ParentID      types.String `tfsdk:"parent_id"`
-	ParentName    types.String `tfsdk:"parent_name"`
-	Raw           types.String `tfsdk:"raw_json"`
+	WorkspaceSlug types.String   `tfsdk:"workspace_slug"`
+	Name          types.String   `tfsdk:"name"`
+	Region        types.String   `tfsdk:"region"`
+	ID            types.String   `tfsdk:"id"`
+	Status        types.String   `tfsdk:"status"`
+	APIHost       types.String   `tfsdk:"api_host"`
+	DBHost        types.String   `tfsdk:"db_host"`
+	Expandable    types.Bool     `tfsdk:"expandable"`
+	Created       types.String   `tfsdk:"created"`
+	Deleted       types.String   `tfsdk:"deleted"`
+	ParentID      types.String   `tfsdk:"parent_id"`
+	ParentName    types.String   `tfsdk:"parent_name"`
+	Raw           types.String   `tfsdk:"raw_json"`
+	Timeouts      timeouts.Value `tfsdk:"timeouts"`
 }
 
 func (r *databaseResource) Metadata(_ context.Context, _ resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = "nile_database"
 }
 
-func (r *databaseResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *databaseResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages a Nile database via `/workspaces/{workspaceSlug}/databases`. " +
 			"Creating a database is asynchronous; the resource waits until the database reports `READY` " +
@@ -128,8 +130,13 @@ func (r *databaseResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"raw_json": schema.StringAttribute{
 				Computed:            true,
+				Sensitive:           true,
 				MarkdownDescription: "Redacted JSON payload of the database as returned by the API.",
 			},
+			"timeouts": timeouts.Attributes(ctx, timeouts.Opts{
+				Create: true,
+				Update: true,
+			}),
 		},
 	}
 }
@@ -159,6 +166,16 @@ func (r *databaseResource) Create(ctx context.Context, req resource.CreateReques
 		resp.Diagnostics.AddError("Client not configured", "Provider client is nil; was Configure called?")
 		return
 	}
+
+	// Bound the asynchronous wait for the database to become ready with the
+	// configured create timeout (default: nileapi.DefaultWaitTimeout).
+	createTimeout, diags := plan.Timeouts.Create(ctx, nileapi.DefaultWaitTimeout)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, createTimeout)
+	defer cancel()
 
 	workspaceSlug := plan.WorkspaceSlug.ValueString()
 	name := plan.Name.ValueString()
@@ -247,6 +264,16 @@ func (r *databaseResource) Update(ctx context.Context, req resource.UpdateReques
 		resp.Diagnostics.AddError("Client not configured", "Provider client is nil; was Configure called?")
 		return
 	}
+
+	// A rename can be asynchronous too; bound the readiness wait with the
+	// configured update timeout (default: nileapi.DefaultWaitTimeout).
+	updateTimeout, diags := plan.Timeouts.Update(ctx, nileapi.DefaultWaitTimeout)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, updateTimeout)
+	defer cancel()
 
 	workspaceSlug := state.WorkspaceSlug.ValueString()
 	oldName := state.Name.ValueString()

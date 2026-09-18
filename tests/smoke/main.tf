@@ -169,7 +169,8 @@ output "compute_instance_created_ats" {
 }
 
 output "first_raw" {
-  value = jsondecode(data.nile_database_compute_instances.test.instances[0].raw_json)
+  value     = jsondecode(data.nile_database_compute_instances.test.instances[0].raw_json)
+  sensitive = true
 }
 
 output "database_name" {

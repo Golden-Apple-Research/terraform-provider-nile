@@ -21,7 +21,7 @@ import (
 
 func TestComputeInstanceResourceSchema(t *testing.T) {
 	sch := resourceSchemaOf(t, NewComputeInstanceResource())
-	for _, name := range []string{"workspace_slug", "database_name", "instance_name", "instance_size", "id", "status", "memory", "hourly_cost", "raw_json"} {
+	for _, name := range []string{"workspace_slug", "database_name", "instance_name", "instance_size", "id", "status", "memory", "hourly_cost", "raw_json", "timeouts"} {
 		if _, ok := sch.Attributes[name]; !ok {
 			t.Errorf("missing attribute %q", name)
 		}
@@ -191,6 +191,68 @@ func TestComputeInstanceResourceDeleteWaitsForGone(t *testing.T) {
 	}
 	if !resp.State.Raw.IsNull() {
 		t.Errorf("state = %v, want removed", resp.State.Raw)
+	}
+}
+
+func TestComputeInstanceResourceCreateTimeoutExpires(t *testing.T) {
+	client := computeAPIServer(t, func(w http.ResponseWriter, r *http.Request, _ int) {
+		// The instance never becomes READY, so only the create timeout can
+		// end the wait.
+		_, _ = w.Write([]byte(`{"instanceId":"inst-1","status":"PROVISIONING"}`))
+	})
+	// Safety net: if the timeouts wiring regresses, the client's own wait
+	// bound fails the test quickly instead of hanging for DefaultWaitTimeout.
+	client.WaitTimeout = 2 * time.Second
+	r := configuredComputeInstanceResource(t, client)
+
+	start := time.Now()
+	resp := resource.CreateResponse{State: crudResponseState(t, r)}
+	r.Create(context.Background(), resource.CreateRequest{
+		Plan: planWith(t, r, map[string]tftypes.Value{
+			"workspace_slug": stringAttr("ws"),
+			"database_name":  stringAttr("db"),
+			"instance_name":  stringAttr("primary"),
+			"instance_size":  stringAttr("large"),
+			"timeouts":       timeoutsAttr(map[string]string{"create": "5ms", "update": "", "delete": ""}),
+		}),
+	}, &resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected an error when the create timeout expires")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("create aborted after %v; the 5ms timeout was not honored", elapsed)
+	}
+}
+
+func TestComputeInstanceResourceDeleteTimeoutExpires(t *testing.T) {
+	client := computeAPIServer(t, func(w http.ResponseWriter, r *http.Request, _ int) {
+		switch r.Method {
+		case http.MethodDelete:
+			_, _ = w.Write([]byte(`{"instanceId":"inst-1","status":"DELETING"}`))
+		default:
+			// The instance never disappears, so only the delete timeout can
+			// end the wait.
+			_, _ = w.Write([]byte(`{"instanceId":"inst-1","status":"DELETING"}`))
+		}
+	})
+	client.WaitTimeout = 2 * time.Second
+	r := configuredComputeInstanceResource(t, client)
+
+	start := time.Now()
+	resp := resource.DeleteResponse{State: crudResponseState(t, r)}
+	r.Delete(context.Background(), resource.DeleteRequest{
+		State: stateWith(t, r, map[string]tftypes.Value{
+			"workspace_slug": stringAttr("ws"),
+			"database_name":  stringAttr("db"),
+			"id":             stringAttr("inst-1"),
+			"timeouts":       timeoutsAttr(map[string]string{"create": "", "update": "", "delete": "5ms"}),
+		}),
+	}, &resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected an error when the delete timeout expires")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("delete aborted after %v; the 5ms timeout was not honored", elapsed)
 	}
 }
 

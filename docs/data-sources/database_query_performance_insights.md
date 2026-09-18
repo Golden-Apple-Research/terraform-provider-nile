@@ -31,7 +31,7 @@ data "nile_database_query_performance_insights" "example" {
     - `thoth_p99_latency_ms` - (Computed) P99 query latency in milliseconds reported by Thoth.
     - `thoth_queries_per_second` - (Computed) Queries per second observed by Thoth.
     - `timestamp` - (Computed) Sample timestamp.
-  - `raw_json` - (Computed) Redacted JSON payload of the response as returned by the API.
+  - `raw_json` - (Computed, Sensitive) Redacted JSON payload of the response as returned by the API.
   - `source` - (Computed) Source of the samples (`source` in the API response).
   - `start` - (Optional) RFC3339 timestamp marking the start of the metrics window (`start` query parameter).
 

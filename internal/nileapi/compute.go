@@ -15,10 +15,12 @@ import (
 
 const (
 	// Pagination safety valves. The API currently returns all instances in a
-	// single response; the page cap only guards against a server that keeps
-	// handing out fresh continuation tokens forever.
-	maxPages       = 1000
-	pageTokenParam = "pageToken"
+	// single response; these caps also prevent a server that keeps handing out
+	// fresh continuation tokens from exhausting provider memory.
+	maxPages            = 1000
+	maxPaginationBytes  = 100 << 20 // 100 MiB across all pages
+	maxComputeInstances = 100_000
+	pageTokenParam      = "pageToken"
 )
 
 // ListComputeInstances calls
@@ -31,6 +33,7 @@ const (
 // automatically and concatenated, so callers never see partial results.
 func (c *Client) ListComputeInstances(ctx context.Context, workspaceSlug, databaseName, start, end string) ([]ComputeInstance, error) {
 	var all []ComputeInstance
+	var totalResponseBytes int
 	pageToken := ""
 	for page := 0; ; page++ {
 		if page >= maxPages {
@@ -45,21 +48,30 @@ func (c *Client) ListComputeInstances(ctx context.Context, workspaceSlug, databa
 		if err := c.get(ctx, u, &body); err != nil {
 			return nil, err
 		}
+		if len(body) > maxPaginationBytes-totalResponseBytes {
+			return nil, fmt.Errorf("listing compute instances exceeded the %d MiB response limit", maxPaginationBytes/(1<<20))
+		}
+		totalResponseBytes += len(body)
 
 		instances, next, err := decodeInstances(ctx, body)
 		if err != nil {
-			return nil, fmt.Errorf("decoding response from %s: %w", u, err)
+			return nil, fmt.Errorf("decoding compute instance response: %w", err)
+		}
+		if len(instances) > maxComputeInstances || len(all) > maxComputeInstances-len(instances) {
+			return nil, fmt.Errorf("listing compute instances exceeded the maximum of %d instances", maxComputeInstances)
 		}
 		all = append(all, instances...)
 		if next == "" {
 			return all, nil
 		}
 		// A token identical to the one just sent means the server did not
-		// advance; erroring out beats looping until the page cap.
+		// advance; erroring out beats looping until the page cap. The token
+		// value is deliberately not included: continuation tokens are opaque
+		// server data and must not leak into logs or diagnostics.
 		if next == pageToken {
-			return nil, fmt.Errorf("pagination did not advance: the API repeated page token %q", next)
+			return nil, fmt.Errorf("pagination did not advance: the API repeated the page token of page %d", page+1)
 		}
-		tflog.Debug(ctx, "following pagination token", map[string]any{"next_page": page + 2, "token": next})
+		tflog.Debug(ctx, "following pagination token", map[string]any{"next_page": page + 2})
 		pageToken = next
 	}
 }
@@ -149,7 +161,7 @@ func decodeComputeInstance(ctx context.Context, payload []byte, wantID string) (
 		return instances[0], nil
 	}
 	if trimmed[0] != '{' {
-		return ComputeInstance{}, fmt.Errorf("unexpected compute instance response shape: %s", truncate(trimmed, 256))
+		return ComputeInstance{}, fmt.Errorf("unexpected compute instance response shape: expected an array or object")
 	}
 	return mapInstances(ctx, []json.RawMessage{trimmed})[0], nil
 }
@@ -249,9 +261,10 @@ func mapInstances(ctx context.Context, raw []json.RawMessage) []ComputeInstance 
 		// being silently ignored.
 		var ai apiInstance
 		if err := json.Unmarshal(r, &ai); err != nil {
+			// Do not log response fragments: the raw payload may contain
+			// credentials or other sensitive fields introduced by the API.
 			tflog.Warn(ctx, "could not promote instance fields; only raw_json will be populated", map[string]any{
 				"error": err.Error(),
-				"raw":   truncate(r, 256),
 			})
 		}
 		ci.ID = derefString(ai.InstanceID)

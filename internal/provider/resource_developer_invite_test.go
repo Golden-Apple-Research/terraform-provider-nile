@@ -91,15 +91,14 @@ func TestDeveloperInviteResourceCreate(t *testing.T) {
 }
 
 func TestDeveloperInviteResourceCreateFallsBackToList(t *testing.T) {
-	// The email-only flow returns no body; the resource must find the invite
-	// by listing and pick the most recent one for the email.
+	// The email-only flow returns no body; the resource may safely recover when
+	// the list contains exactly one matching invite.
 	client := inviteAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			_, _ = w.Write([]byte(`{}`))
 			return
 		}
 		_, _ = w.Write([]byte(`[
-			{"id":"inv-old","email":"b@example.com","created":"2025-01-01T00:00:00Z"},
 			{"id":"inv-1","email":"b@example.com","created":"2025-06-01T00:00:00Z"},
 			{"id":"inv-other","email":"c@example.com","created":"2025-07-01T00:00:00Z"}
 		]`))
@@ -152,16 +151,20 @@ func TestFindInviteByEmail(t *testing.T) {
 	})
 	res := configuredInviteResource(t, client)
 
-	invite, err := res.findInviteByEmail(context.Background(), "acme", "b@example.com")
-	if err != nil {
-		t.Fatalf("findInviteByEmail: %v", err)
+	if _, err := res.findInviteByEmail(context.Background(), "acme", "b@example.com"); err == nil {
+		t.Error("expected an error for ambiguous matching invites")
 	}
-	if invite.ID != "inv-2" {
-		t.Errorf("id = %q, want the newest invite", invite.ID)
-	}
-
 	if _, err := res.findInviteByEmail(context.Background(), "acme", "nobody@example.com"); err == nil {
 		t.Error("expected an error for an email without invites")
+	}
+
+	singleClient := inviteAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`[{"id":"inv-only","email":"b@example.com"}]`))
+	})
+	singleRes := configuredInviteResource(t, singleClient)
+	invite, err := singleRes.findInviteByEmail(context.Background(), "acme", "b@example.com")
+	if err != nil || invite.ID != "inv-only" {
+		t.Fatalf("single invite = %+v, err = %v", invite, err)
 	}
 }
 

@@ -97,6 +97,7 @@ func workspaceBillingReadinessSchema(_ context.Context) schema.Schema {
 			},
 			"raw_json": schema.StringAttribute{
 				Computed:            true,
+				Sensitive:           true,
 				MarkdownDescription: "Redacted JSON payload of the response as returned by the API.",
 			},
 		},
@@ -186,6 +187,7 @@ func workspaceBillingTotalsSchema(_ context.Context) schema.Schema {
 			},
 			"raw_json": schema.StringAttribute{
 				Computed:            true,
+				Sensitive:           true,
 				MarkdownDescription: "Redacted JSON payload of the response as returned by the API.",
 			},
 		},

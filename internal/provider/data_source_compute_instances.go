@@ -124,6 +124,7 @@ func computeInstancesSchema(_ context.Context) schema.Schema {
 						},
 						"raw_json": schema.StringAttribute{
 							Computed:            true,
+							Sensitive:           true,
 							MarkdownDescription: "Redacted JSON payload of the instance as returned by the API.",
 						},
 					},

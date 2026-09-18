@@ -37,6 +37,7 @@ func developerDataSourceSchema(_ context.Context) schema.Schema {
 	attrs := developerAttributes()
 	attrs["raw_json"] = schema.StringAttribute{
 		Computed:            true,
+		Sensitive:           true,
 		MarkdownDescription: "Redacted JSON payload of the developer as returned by the API.",
 	}
 	attrs["id"] = schema.StringAttribute{

@@ -16,12 +16,14 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	dsschema "github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	rschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
 
+	"github.com/Golden-Apple-Research/nile-terraform/internal/nileapi"
 	"github.com/Golden-Apple-Research/nile-terraform/internal/provider"
 )
 
@@ -281,8 +283,14 @@ func writeAttribute(b *strings.Builder, a attribute, name, indent string) {
 	if a.IsSensitive() {
 		mode += ", Sensitive"
 	}
-	description := strings.TrimSpace(a.GetMarkdownDescription())
-	fmt.Fprintf(b, "%s- `%s` - (%s) %s\n", indent, name, mode, description)
+	// The framework's timeouts package ships its attributes without
+	// descriptions; fill them in so the generated docs are self-explanatory.
+	description := strings.TrimSpace(timeoutsDescription(name, a.GetMarkdownDescription()))
+	line := fmt.Sprintf("%s- `%s` - (%s)", indent, name, mode)
+	if description != "" {
+		line += " " + description
+	}
+	b.WriteString(line + "\n")
 	if nested := nestedAttributes(a); nested != nil {
 		nestedNames := make([]string, 0, len(nested))
 		for n := range nested {
@@ -293,6 +301,39 @@ func writeAttribute(b *strings.Builder, a attribute, name, indent string) {
 			writeAttribute(b, nested[n], n, indent+"  ")
 		}
 	}
+}
+
+// defaultTimeoutDoc renders the provider's default wait timeout for the
+// generated docs (for example "20m").
+func defaultTimeoutDoc() string {
+	d := nileapi.DefaultWaitTimeout
+	if d%time.Minute == 0 {
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	}
+	return d.String()
+}
+
+// timeoutsDescription returns a documentation string for the framework's
+// timeouts attributes, which carry no descriptions of their own. Any other
+// attribute passes its own description through unchanged.
+func timeoutsDescription(name, description string) string {
+	if description != "" {
+		return description
+	}
+	def := defaultTimeoutDoc()
+	switch name {
+	case "timeouts":
+		return "Timeouts for asynchronous operations. Unspecified operations use the default of `" + def + "`."
+	case "create":
+		return "Time to wait for the resource to be created and become ready. Defaults to `" + def + "`."
+	case "read":
+		return "Time to wait for the resource to be read."
+	case "update":
+		return "Time to wait for the resource update to settle. Defaults to `" + def + "`."
+	case "delete":
+		return "Time to wait for the resource to be deleted. Defaults to `" + def + "`."
+	}
+	return ""
 }
 
 // nestedAttributes returns the child attributes of a nested attribute, or nil.

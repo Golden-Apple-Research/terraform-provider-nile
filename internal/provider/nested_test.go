@@ -49,6 +49,17 @@ func TestNestedAttributesCoverModels(t *testing.T) {
 	assertAttributesCoverModel(t, credentialAttributes(), credentialModel{})
 	assertAttributesCoverModel(t, inviteAttributes(), inviteModel{})
 	assertAttributesCoverModel(t, subscriptionAttributes(), subscriptionModel{})
+
+	for name, attrs := range map[string]map[string]schema.Attribute{
+		"database":     databaseAttributes(),
+		"credential":   credentialAttributes(),
+		"invite":       inviteAttributes(),
+		"subscription": subscriptionAttributes(),
+	} {
+		if attr := attrs["raw_json"]; attr == nil || !attr.IsSensitive() {
+			t.Errorf("%s raw_json must be sensitive", name)
+		}
+	}
 }
 
 func TestWorkspaceModelFromAPI(t *testing.T) {

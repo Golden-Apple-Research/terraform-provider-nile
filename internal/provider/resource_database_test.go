@@ -22,7 +22,7 @@ import (
 
 func TestDatabaseResourceSchema(t *testing.T) {
 	sch := resourceSchemaOf(t, NewDatabaseResource())
-	for _, name := range []string{"workspace_slug", "name", "region", "id", "status", "raw_json"} {
+	for _, name := range []string{"workspace_slug", "name", "region", "id", "status", "raw_json", "timeouts"} {
 		if _, ok := sch.Attributes[name]; !ok {
 			t.Errorf("missing attribute %q", name)
 		}
@@ -31,6 +31,35 @@ func TestDatabaseResourceSchema(t *testing.T) {
 		if attr := sch.Attributes[name]; attr == nil || !attr.IsRequired() {
 			t.Errorf("%s must be required", name)
 		}
+	}
+}
+
+func TestDatabaseResourceCreateTimeoutExpires(t *testing.T) {
+	client := databaseAPIServer(t, func(w http.ResponseWriter, r *http.Request, _ int) {
+		// The database never leaves PENDING, so only the create timeout can
+		// end the wait.
+		_, _ = w.Write([]byte(`{"id":"db-1","name":"app","status":"PENDING","region":"AWS_US_WEST_2"}`))
+	})
+	// Safety net: if the timeouts wiring regresses, the client's own wait
+	// bound fails the test quickly instead of hanging for DefaultWaitTimeout.
+	client.WaitTimeout = 2 * time.Second
+	r := configuredDatabaseResource(t, client)
+
+	start := time.Now()
+	resp := resource.CreateResponse{State: crudResponseState(t, r)}
+	r.Create(context.Background(), resource.CreateRequest{
+		Plan: planWith(t, r, map[string]tftypes.Value{
+			"workspace_slug": stringAttr("ws"),
+			"name":           stringAttr("app"),
+			"region":         stringAttr("AWS_US_WEST_2"),
+			"timeouts":       timeoutsAttr(map[string]string{"create": "5ms", "update": ""}),
+		}),
+	}, &resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected an error when the create timeout expires")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("create aborted after %v; the 5ms timeout was not honored", elapsed)
 	}
 }
 

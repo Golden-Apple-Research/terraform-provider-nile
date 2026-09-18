@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -37,25 +38,26 @@ type computeInstanceResource struct {
 }
 
 type computeInstanceResourceModel struct {
-	WorkspaceSlug types.String  `tfsdk:"workspace_slug"`
-	DatabaseName  types.String  `tfsdk:"database_name"`
-	InstanceName  types.String  `tfsdk:"instance_name"`
-	InstanceSize  types.String  `tfsdk:"instance_size"`
-	ID            types.String  `tfsdk:"id"`
-	Status        types.String  `tfsdk:"status"`
-	Region        types.String  `tfsdk:"region"`
-	Memory        types.String  `tfsdk:"memory"`
-	HourlyCost    types.Float64 `tfsdk:"hourly_cost"`
-	CreatedAt     types.String  `tfsdk:"created_at"`
-	UpdatedAt     types.String  `tfsdk:"updated_at"`
-	Raw           types.String  `tfsdk:"raw_json"`
+	WorkspaceSlug types.String   `tfsdk:"workspace_slug"`
+	DatabaseName  types.String   `tfsdk:"database_name"`
+	InstanceName  types.String   `tfsdk:"instance_name"`
+	InstanceSize  types.String   `tfsdk:"instance_size"`
+	ID            types.String   `tfsdk:"id"`
+	Status        types.String   `tfsdk:"status"`
+	Region        types.String   `tfsdk:"region"`
+	Memory        types.String   `tfsdk:"memory"`
+	HourlyCost    types.Float64  `tfsdk:"hourly_cost"`
+	CreatedAt     types.String   `tfsdk:"created_at"`
+	UpdatedAt     types.String   `tfsdk:"updated_at"`
+	Raw           types.String   `tfsdk:"raw_json"`
+	Timeouts      timeouts.Value `tfsdk:"timeouts"`
 }
 
 func (r *computeInstanceResource) Metadata(_ context.Context, _ resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = "nile_database_compute_instance"
 }
 
-func (r *computeInstanceResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *computeInstanceResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages a dedicated compute instance of a Nile database via " +
 			"`/workspaces/{workspaceSlug}/databases/{databaseName}/compute`. Renaming and resizing " +
@@ -127,8 +129,14 @@ func (r *computeInstanceResource) Schema(_ context.Context, _ resource.SchemaReq
 			},
 			"raw_json": schema.StringAttribute{
 				Computed:            true,
+				Sensitive:           true,
 				MarkdownDescription: "Redacted JSON payload of the instance as returned by the API.",
 			},
+			"timeouts": timeouts.Attributes(ctx, timeouts.Opts{
+				Create: true,
+				Update: true,
+				Delete: true,
+			}),
 		},
 	}
 }
@@ -158,6 +166,16 @@ func (r *computeInstanceResource) Create(ctx context.Context, req resource.Creat
 		resp.Diagnostics.AddError("Client not configured", "Provider client is nil; was Configure called?")
 		return
 	}
+
+	// Creating is asynchronous; bound the readiness wait with the configured
+	// create timeout (default: nileapi.DefaultWaitTimeout).
+	createTimeout, diags := plan.Timeouts.Create(ctx, nileapi.DefaultWaitTimeout)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, createTimeout)
+	defer cancel()
 
 	workspaceSlug := plan.WorkspaceSlug.ValueString()
 	databaseName := plan.DatabaseName.ValueString()
@@ -247,6 +265,16 @@ func (r *computeInstanceResource) Update(ctx context.Context, req resource.Updat
 		return
 	}
 
+	// Resizes settle asynchronously; bound the wait with the configured
+	// update timeout (default: nileapi.DefaultWaitTimeout).
+	updateTimeout, diags := plan.Timeouts.Update(ctx, nileapi.DefaultWaitTimeout)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, updateTimeout)
+	defer cancel()
+
 	workspaceSlug := state.WorkspaceSlug.ValueString()
 	databaseName := state.DatabaseName.ValueString()
 	instanceID := state.ID.ValueString()
@@ -290,6 +318,16 @@ func (r *computeInstanceResource) Delete(ctx context.Context, req resource.Delet
 		resp.Diagnostics.AddError("Client not configured", "Provider client is nil; was Configure called?")
 		return
 	}
+
+	// Deletion settles asynchronously too; bound the wait with the configured
+	// delete timeout (default: nileapi.DefaultWaitTimeout).
+	deleteTimeout, diags := state.Timeouts.Delete(ctx, nileapi.DefaultWaitTimeout)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, deleteTimeout)
+	defer cancel()
 
 	workspaceSlug := state.WorkspaceSlug.ValueString()
 	databaseName := state.DatabaseName.ValueString()

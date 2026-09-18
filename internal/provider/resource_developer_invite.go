@@ -269,26 +269,31 @@ func (r *developerInviteResource) ImportState(ctx context.Context, req resource.
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), parts[1])...)
 }
 
-// findInviteByEmail picks the most recently created invite for an email
-// address from the workspace's invite list.
+// findInviteByEmail resolves the email-only create flow only when the API
+// returns exactly one matching invite. Picking the newest invite is racy: a
+// concurrent invite for the same address could otherwise be adopted and later
+// deleted by this Terraform resource.
 func (r *developerInviteResource) findInviteByEmail(ctx context.Context, workspaceSlug, email string) (nileapi.DeveloperInvite, error) {
 	invites, err := r.client.ListDeveloperInvites(ctx, workspaceSlug, "")
 	if err != nil {
 		return nileapi.DeveloperInvite{}, err
 	}
-	var newest nileapi.DeveloperInvite
+	matches := make([]nileapi.DeveloperInvite, 0, 1)
 	for _, invite := range invites {
-		if invite.Email != email {
-			continue
-		}
-		if newest.ID == "" || invite.Created > newest.Created {
-			newest = invite
+		if invite.Email == email {
+			matches = append(matches, invite)
 		}
 	}
-	if newest.ID == "" {
+	if len(matches) == 0 {
 		return nileapi.DeveloperInvite{}, fmt.Errorf("no invite for %q found in workspace %q", email, workspaceSlug)
 	}
-	return newest, nil
+	if len(matches) > 1 {
+		return nileapi.DeveloperInvite{}, fmt.Errorf(
+			"found %d invites for %q in workspace %q; the API did not identify which invite was created",
+			len(matches), email, workspaceSlug,
+		)
+	}
+	return matches[0], nil
 }
 
 // applyInviteResource merges an API invite into the model. Programmatic is a

@@ -75,6 +75,7 @@ func workspaceSubscriptionSchema(_ context.Context) schema.Schema {
 			},
 			"raw_json": schema.StringAttribute{
 				Computed:            true,
+				Sensitive:           true,
 				MarkdownDescription: "Redacted JSON payload of the subscription as returned by the API.",
 			},
 		},

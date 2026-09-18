@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
@@ -36,8 +38,16 @@ jobs:
 
       - name: govulncheck
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          # Pin the scanner to the v1.8.0 commit rather than a mutable tag.
+          go install golang.org/x/vuln/cmd/govulncheck@709015412431dd2b5b28a53c06c70bc02d49074c
           "$(go env GOPATH)/bin/govulncheck" ./...
+
+      - name: high-confidence secret scan
+        run: |
+          if git grep -n -I -E -- '-----BEGIN (RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----|\bAKIA[0-9A-Z]{16}\b|\bgh[pousr]_[A-Za-z0-9_]{20,}\b|\bgithub_pat_[A-Za-z0-9_]{20,}\b|\bxox[baprs]-[0-9A-Za-z-]{20,}\b'; then
+            echo "high-confidence secret pattern found" >&2
+            exit 1
+          fi
 
       - name: go test
         run: go test ./... -v
@@ -47,6 +57,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:

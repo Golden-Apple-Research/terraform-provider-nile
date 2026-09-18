@@ -24,7 +24,7 @@ data "nile_workspace_subscription_history" "example" {
   - `subscriptions` - (Computed) Subscription records, most recent first.
     - `default_payment_method` - (Computed) Default payment method of the subscription, if any.
     - `level` - (Computed) Subscription level.
-    - `raw_json` - (Computed) Redacted JSON payload of the subscription as returned by the API.
+    - `raw_json` - (Computed, Sensitive) Redacted JSON payload of the subscription as returned by the API.
     - `subscription_id` - (Computed) Subscription identifier.
     - `valid_from` - (Computed) Start of the subscription period.
     - `valid_to` - (Computed) End of the subscription period, if scheduled.

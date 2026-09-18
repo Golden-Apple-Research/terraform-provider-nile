@@ -63,6 +63,23 @@ func rawObject(objType tftypes.Object, overrides map[string]tftypes.Value) tftyp
 // stringAttr wraps a string for rawObject overrides.
 func stringAttr(s string) tftypes.Value { return tftypes.NewValue(tftypes.String, s) }
 
+// timeoutsAttr builds a raw `timeouts` attribute value. The map keys must
+// match the operations the resource's timeouts schema enables (for example
+// create and update); an empty duration leaves that operation null.
+func timeoutsAttr(durations map[string]string) tftypes.Value {
+	types := make(map[string]tftypes.Type, len(durations))
+	vals := make(map[string]tftypes.Value, len(durations))
+	for op, d := range durations {
+		types[op] = tftypes.String
+		if d == "" {
+			vals[op] = tftypes.NewValue(tftypes.String, nil)
+		} else {
+			vals[op] = stringAttr(d)
+		}
+	}
+	return tftypes.NewValue(tftypes.Object{AttributeTypes: types}, vals)
+}
+
 // resourceSchemaOf returns the schema of a resource.
 func resourceSchemaOf(t *testing.T, r resource.Resource) resourceschema.Schema {
 	t.Helper()

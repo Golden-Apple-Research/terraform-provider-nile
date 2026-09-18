@@ -77,6 +77,13 @@ func redactedRawJSON(raw json.RawMessage) types.String {
 	if err := json.Unmarshal(raw, &value); err != nil {
 		return types.StringNull()
 	}
+	// All currently supported raw payloads are objects or arrays. Refuse to
+	// persist a scalar payload because it could itself be a bare secret string.
+	switch value.(type) {
+	case map[string]any, []any:
+	default:
+		return types.StringNull()
+	}
 	redactJSONSecrets(value)
 	encoded, err := json.Marshal(value)
 	if err != nil {
@@ -121,7 +128,8 @@ func isSensitiveJSONKey(key string) bool {
 	switch normalized {
 	case "password", "passwd", "code", "claimcode", "secret", "secretkey",
 		"apikey", "privatekey", "accesstoken", "refreshtoken", "apitoken",
-		"idtoken", "sessiontoken", "clientsecret", "authorization", "bearer":
+		"idtoken", "sessiontoken", "clientsecret", "authorization", "bearer",
+		"connectionstring", "connectionuri", "databaseurl", "databaseuri", "dsn":
 		return true
 	}
 	// Substring and suffix checks catch qualified names such as "dbPassword",
@@ -130,6 +138,11 @@ func isSensitiveJSONKey(key string) bool {
 	return strings.Contains(normalized, "password") ||
 		strings.Contains(normalized, "passwd") ||
 		strings.Contains(normalized, "secret") ||
+		strings.Contains(normalized, "connectionstring") ||
+		strings.Contains(normalized, "connectionuri") ||
+		strings.Contains(normalized, "databaseurl") ||
+		strings.Contains(normalized, "databaseuri") ||
+		strings.Contains(normalized, "dbpass") ||
 		strings.HasSuffix(normalized, "token") ||
 		strings.HasSuffix(normalized, "apikey") ||
 		strings.HasSuffix(normalized, "privatekey")

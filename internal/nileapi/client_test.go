@@ -417,13 +417,116 @@ func TestNewClientRequiresToken(t *testing.T) {
 
 func TestNewClientRequiresHTTPScheme(t *testing.T) {
 	for _, baseURL := range []string{
-		"global.thenile.dev",       // missing scheme
-		"ftp://global.thenile.dev", // wrong scheme
-		"://thenile.dev",           // unparseable
+		"global.thenile.dev",        // missing scheme
+		"ftp://global.thenile.dev",  // wrong scheme
+		"http://global.thenile.dev", // remote plaintext HTTP
+		"://thenile.dev",            // unparseable
 	} {
 		if _, err := NewClient(baseURL, "tok"); err == nil {
 			t.Errorf("expected error for base URL %q", baseURL)
 		}
+	}
+}
+
+func TestNewClientAllowsLoopbackHTTP(t *testing.T) {
+	if _, err := NewClient("http://127.0.0.1:12345", "tok"); err != nil {
+		t.Fatalf("loopback HTTP should be allowed for local test endpoints: %v", err)
+	}
+}
+
+func TestNewClientRejectsBaseURLCredentialsAndQuery(t *testing.T) {
+	for _, baseURL := range []string{
+		"https://user@example.com",
+		"https://example.com?token=secret",
+		"https://example.com/prefix",
+	} {
+		if _, err := NewClient(baseURL, "tok"); err == nil {
+			t.Errorf("expected error for unsafe base URL %q", baseURL)
+		}
+	}
+}
+
+func TestNewClientDoesNotFollowRedirectWithAuthorization(t *testing.T) {
+	var targetAuth string
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		targetAuth = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer target.Close()
+
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
+	}))
+	defer redirect.Close()
+
+	c, err := NewClient(redirect.URL, "redirect-secret")
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	c.MaxRetries = 0
+	if _, err := c.ListComputeInstances(t.Context(), "ws", "db", "", ""); err == nil {
+		t.Fatal("expected redirect response to be returned as an error")
+	}
+	if targetAuth != "" {
+		t.Fatalf("redirect target received Authorization header %q", targetAuth)
+	}
+}
+
+func TestDecodeAPIErrorDoesNotExposeSecrets(t *testing.T) {
+	err := decodeAPIError(http.StatusBadRequest, []byte(`{"errorCode":"bad_request","message":"password=s3cret","statusCode":400}`))
+	if strings.Contains(err.Error(), "s3cret") {
+		t.Fatalf("API error exposed secret: %v", err)
+	}
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.Message != "[REDACTED]" {
+		t.Fatalf("APIError = %+v, want redacted message", apiErr)
+	}
+
+	fallback := decodeAPIError(http.StatusInternalServerError, []byte(`{"password":"s3cret"}`))
+	if strings.Contains(fallback.Error(), "s3cret") {
+		t.Fatalf("fallback API error exposed response body: %v", fallback)
+	}
+}
+
+func TestRequestErrorsDoNotExposeQueryValues(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`not-json`))
+	}))
+	defer srv.Close()
+
+	c, err := NewClient(srv.URL, "tok")
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	var out map[string]string
+	u := withQuery(c.endpoint("resource"), "pageToken", "opaque-secret")
+	if err := c.get(t.Context(), u, &out); err == nil {
+		t.Fatal("expected JSON decoding error")
+	} else if strings.Contains(err.Error(), "opaque-secret") {
+		t.Fatalf("request error exposed query value: %v", err)
+	}
+}
+
+func TestPost429IsNotRetried(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"errorCode":"rate_limited"}`))
+	}))
+	defer srv.Close()
+
+	c, err := NewClient(srv.URL, "tok")
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	c.retrySleep = instantSleep
+	if err := c.post(t.Context(), c.endpoint("resource"), nil, nil); err == nil {
+		t.Fatal("expected POST 429 error")
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("POST calls = %d, want 1", calls.Load())
 	}
 }
 

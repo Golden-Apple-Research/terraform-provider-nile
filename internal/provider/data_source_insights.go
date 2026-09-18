@@ -58,6 +58,7 @@ func insightsArgs() map[string]schema.Attribute {
 		},
 		"raw_json": schema.StringAttribute{
 			Computed:            true,
+			Sensitive:           true,
 			MarkdownDescription: "Redacted JSON payload of the response as returned by the API.",
 		},
 	}

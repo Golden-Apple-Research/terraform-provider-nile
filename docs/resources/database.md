@@ -32,8 +32,11 @@ resource "nile_database" "example" {
   - `id` - (Computed) Database identifier (`id` in the API response).
   - `parent_id` - (Computed) Identifier of the parent (primary) database for read replicas.
   - `parent_name` - (Computed) Name of the parent (primary) database for read replicas.
-  - `raw_json` - (Computed) Redacted JSON payload of the database as returned by the API.
+  - `raw_json` - (Computed, Sensitive) Redacted JSON payload of the database as returned by the API.
   - `status` - (Computed) Database status (`PENDING`, `REQUESTED`, `BUILT`, `POOLED` or `READY`).
+  - `timeouts` - (Optional) Timeouts for asynchronous operations. Unspecified operations use the default of `20m`.
+    - `create` - (Optional) Time to wait for the resource to be created and become ready. Defaults to `20m`.
+    - `update` - (Optional) Time to wait for the resource update to settle. Defaults to `20m`.
 
 ## Import
 

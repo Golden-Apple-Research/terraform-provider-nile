@@ -46,7 +46,7 @@ func (p *nileProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp 
 		Attributes: map[string]schema.Attribute{
 			"api_url": schema.StringAttribute{
 				Optional:            true,
-				MarkdownDescription: fmt.Sprintf("Base URL of the Nile API. Defaults to `%s`. May also be set via `%s`.", nileapi.DefaultBaseURL, envAPIURL),
+				MarkdownDescription: fmt.Sprintf("Base URL of the Nile API. Defaults to `%s`. HTTPS is required; plain HTTP is accepted only for loopback test endpoints. May also be set via `%s`.", nileapi.DefaultBaseURL, envAPIURL),
 			},
 			"api_token": schema.StringAttribute{
 				Optional:            true,

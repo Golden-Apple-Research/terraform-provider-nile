@@ -65,6 +65,7 @@ provider "nile" {
   api_token = var.nile_api_token
 
   # Optional. Defaults to https://global.thenile.dev
+  # HTTPS is required; plain HTTP is allowed only for loopback test endpoints.
   # Can also be set via NILE_API_URL.
   # api_url = "https://global.thenile.dev"
 }
@@ -113,22 +114,27 @@ documented under [`docs/`](docs/).
   created in the same apply. Waiting is bounded: 20 minutes per operation by
   default (`Client.WaitTimeout`), with a poll every 5 seconds
   (`Client.PollInterval`).
+- **Transport security.** The API URL must use HTTPS. Plain HTTP is accepted
+  only for loopback test endpoints. Redirects are not followed, so the bearer
+  token cannot be forwarded to a different endpoint.
 - **Passwords and invite codes.** The API returns credential passwords and
   programmatic invite codes exactly once. They are stored as sensitive values
-  in state and are never cleared by a refresh.
+  in state and are never cleared by a refresh. Terraform state must therefore
+  use an encrypted backend with restricted access.
 - **`raw_json`.** Most data sources expose the API payload as
   `raw_json`, so fields introduced by the Nile API in the future remain
   accessible via `jsondecode()` even before the provider promotes them to
-  typed attributes. Common secret fields (passwords, tokens, secrets, invite
+  typed attributes. Raw payload attributes are marked sensitive and common
+  secret fields (passwords, tokens, secrets, connection strings and invite
   codes) are replaced with `[REDACTED]` before the payload reaches state.
 - **Retries.** Transient failures — HTTP `408`, `429`, `5xx`, and network
-  errors — are retried up to three times with exponential backoff and jitter.
-  A `Retry-After` header takes precedence (capped at 30 seconds). Only
-  replay-safe requests are retried on `5xx`/network errors; `POST` is retried
-  on `429` only, so a retried create cannot duplicate a resource.
+  errors — are retried up to three times with exponential backoff and jitter
+  only for replay-safe HTTP methods. A `Retry-After` header takes precedence
+  (capped at 30 seconds); non-idempotent `POST` requests are never retried.
 - **Pagination.** The compute instance list follows a continuation token
   (`nextPageToken`) automatically if the API introduces one, with guards
-  against non-advancing tokens.
+  against non-advancing tokens, a 100 MiB aggregate response limit and a
+  100,000-instance limit.
 - **Import.** All resources support `terraform import`:
   - `nile_database`: `workspace_slug/database_name`
   - `nile_database_compute_instance`: `workspace_slug/database_name/instance_id`

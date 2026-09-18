@@ -83,7 +83,7 @@ func (c *Client) DeleteDatabase(ctx context.Context, workspaceSlug, databaseName
 // payload stays in Raw.
 func (c *Client) ProvisionDatabase(ctx context.Context, region string) (ProvisionedDatabase, error) {
 	var out ProvisionedDatabase
-	if err := c.post(ctx, c.endpoint("databases", "provision"),
+	if err := c.postUnauthenticated(ctx, c.endpoint("databases", "provision"),
 		UnauthenticatedProvisionDatabaseRequest{Region: region}, &out); err != nil {
 		return ProvisionedDatabase{}, err
 	}

@@ -60,9 +60,9 @@ func TestSplitResourceID(t *testing.T) {
 }
 
 func TestRedactedRawJSON(t *testing.T) {
-	got := redactedRawJSON(json.RawMessage(`{"password":"pw","code":"invite","nested":{"access_token":"token","apiKey":"api-key","secret_key":"secret-key","privateKey":"private-key"},"name":"safe"}`))
+	got := redactedRawJSON(json.RawMessage(`{"password":"pw","code":"invite","nested":{"access_token":"token","apiKey":"api-key","secret_key":"secret-key","privateKey":"private-key","connectionString":"postgres://user:s3cret@example/db","db_pass":"db-secret"},"name":"safe"}`))
 	value := got.ValueString()
-	for _, secret := range []string{`:"pw"`, `:"invite"`, `:"token"`, `:"api-key"`, `:"secret-key"`, `:"private-key"`} {
+	for _, secret := range []string{`:"pw"`, `:"invite"`, `:"token"`, `:"api-key"`, `:"secret-key"`, `:"private-key"`, `postgres://user:s3cret@example/db`, `:"db-secret"`} {
 		if strings.Contains(value, secret) {
 			t.Errorf("redacted JSON contains secret %q: %s", secret, value)
 		}
@@ -78,6 +78,9 @@ func TestRedactedRawJSON(t *testing.T) {
 	}
 	if got := redactedRawJSON(json.RawMessage(`{not json`)); !got.IsNull() {
 		t.Errorf("invalid payload = %v, want null", got)
+	}
+	if got := redactedRawJSON(json.RawMessage(`"bare-secret"`)); !got.IsNull() {
+		t.Errorf("scalar payload = %v, want null", got)
 	}
 }
 
@@ -109,7 +112,8 @@ func TestIsSensitiveJSONKey(t *testing.T) {
 		"secret", "clientSecret", "client_secret", "secretKey", "secret_key",
 		"token", "accessToken", "access_token", "refreshToken", "apiToken", "api-token",
 		"idToken", "session_token", "apiKey", "api_key", "privateKey", "private-key",
-		"authorization", "bearer",
+		"authorization", "bearer", "connectionString", "connectionUri", "databaseUrl",
+		"databaseUri", "dsn", "db_pass",
 	}
 	for _, key := range sensitive {
 		if !isSensitiveJSONKey(key) {

@@ -28,13 +28,13 @@ This object has no required arguments.
     - `name` - (Computed) Database name.
     - `parent_id` - (Computed) Identifier of the parent (primary) database for read replicas.
     - `parent_name` - (Computed) Name of the parent (primary) database for read replicas.
-    - `raw_json` - (Computed) Redacted JSON payload of the database as returned by the API.
+    - `raw_json` - (Computed, Sensitive) Redacted JSON payload of the database as returned by the API.
     - `region` - (Computed) Region the database runs in (`AWS_US_WEST_2`, `AWS_EU_CENTRAL_1` or `AZURE_EASTUS`).
     - `status` - (Computed) Database status (`PENDING`, `REQUESTED`, `BUILT`, `POOLED` or `READY`).
   - `email` - (Computed) Developer email address.
   - `id` - (Computed) Developer identifier (`id` in the API response).
   - `kind` - (Computed) Developer kind (`HUMAN` or `API`).
-  - `raw_json` - (Computed) Redacted JSON payload of the developer as returned by the API.
+  - `raw_json` - (Computed, Sensitive) Redacted JSON payload of the developer as returned by the API.
   - `workspaces` - (Computed) Workspaces the developer has access to.
     - `created` - (Computed) Creation timestamp.
     - `id` - (Computed) Workspace identifier (`id` in the API response).
