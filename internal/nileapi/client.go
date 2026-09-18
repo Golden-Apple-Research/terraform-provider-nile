@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Golden Apple Research
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package nileapi is a minimal client for the Nile control plane REST API.
 package nileapi
 
@@ -11,6 +14,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 const (
@@ -21,6 +26,9 @@ const (
 type Client struct {
 	BaseURL   *url.URL
 	AuthToken string
+	// UserAgent, when set, is sent as the User-Agent header on requests so
+	// the API can identify the provider.
+	UserAgent string
 	HTTP      *http.Client
 }
 
@@ -35,6 +43,12 @@ func NewClient(baseURL, authToken string) (*Client, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid base URL %q: %w", baseURL, err)
+	}
+	// Catch scheme mistakes (e.g. a bare "global.thenile.dev") here rather
+	// than at first request time with an opaque "unsupported protocol scheme"
+	// error from net/http.
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, fmt.Errorf("invalid base URL %q: it must include an http:// or https:// scheme", baseURL)
 	}
 	return &Client{
 		BaseURL:   u,
@@ -96,6 +110,9 @@ func (c *Client) ListComputeInstances(ctx context.Context, workspaceSlug, databa
 	}
 	req.Header.Set("Authorization", "Bearer "+c.AuthToken)
 	req.Header.Set("Accept", "application/json")
+	if c.UserAgent != "" {
+		req.Header.Set("User-Agent", c.UserAgent)
+	}
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
@@ -114,7 +131,7 @@ func (c *Client) ListComputeInstances(ctx context.Context, workspaceSlug, databa
 	}
 
 	// The API may return a bare array or an object wrapping the array.
-	instances, err := decodeInstances(body)
+	instances, err := decodeInstances(ctx, body)
 	if err != nil {
 		return nil, fmt.Errorf("decoding response from %s: %w", endpoint.String(), err)
 	}
@@ -125,11 +142,16 @@ func (c *Client) ListComputeInstances(ctx context.Context, workspaceSlug, databa
 // responses that wrap the list instead of returning a bare array.
 var wrapperKeys = []string{"instances", "compute", "items", "data", "results"}
 
-func decodeInstances(body []byte) ([]ComputeInstance, error) {
-	// The documented response is a bare JSON array.
+func decodeInstances(ctx context.Context, body []byte) ([]ComputeInstance, error) {
+	// The documented response is a bare JSON array. A bare JSON null is
+	// rejected instead of being treated as an empty list: silently accepting
+	// it would hide API changes from the user.
 	var raw []json.RawMessage
 	if err := json.Unmarshal(body, &raw); err == nil {
-		return mapInstances(raw), nil
+		if raw == nil {
+			return nil, fmt.Errorf("unexpected JSON shape: null")
+		}
+		return mapInstances(ctx, raw), nil
 	}
 
 	// Tolerate a wrapper object, but only if it actually contains an array:
@@ -144,7 +166,10 @@ func decodeInstances(body []byte) ([]ComputeInstance, error) {
 			if err := json.Unmarshal(inner, &raw); err != nil {
 				return nil, fmt.Errorf("wrapper key %q does not contain an array: %v", key, err)
 			}
-			return mapInstances(raw), nil
+			if raw == nil {
+				return nil, fmt.Errorf("wrapper key %q is null: expected an array", key)
+			}
+			return mapInstances(ctx, raw), nil
 		}
 	}
 	return nil, fmt.Errorf("unexpected JSON shape: expected an array or an object with one of the keys %s",
@@ -164,14 +189,21 @@ type apiInstance struct {
 	} `json:"instanceType"`
 }
 
-func mapInstances(raw []json.RawMessage) []ComputeInstance {
+func mapInstances(ctx context.Context, raw []json.RawMessage) []ComputeInstance {
 	out := make([]ComputeInstance, 0, len(raw))
 	for _, r := range raw {
 		ci := ComputeInstance{Raw: append(json.RawMessage(nil), r...)}
 		// Best-effort promotion of the documented fields; a type mismatch in
-		// one field must not discard the others, so decode errors are ignored.
+		// one field must not discard the others. The payload stays available
+		// via Raw, and the mismatch is surfaced as a log warning instead of
+		// being silently ignored.
 		var ai apiInstance
-		_ = json.Unmarshal(r, &ai)
+		if err := json.Unmarshal(r, &ai); err != nil {
+			tflog.Warn(ctx, "could not promote instance fields; only raw_json will be populated", map[string]any{
+				"error": err.Error(),
+				"raw":   truncate(r, 256),
+			})
+		}
 		ci.ID = derefString(ai.InstanceID)
 		ci.Name = derefString(ai.InstanceName)
 		ci.Status = derefString(ai.Status)

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Golden Apple Research
+// SPDX-License-Identifier: EUPL-1.2
+
 package provider
 
 import (
@@ -62,24 +65,32 @@ func (d *computeInstancesDataSource) Schema(_ context.Context, _ datasource.Sche
 			"Optionally restricted to instances active within a time window (`start`/`end`).",
 		Attributes: map[string]schema.Attribute{
 			"workspace_slug": schema.StringAttribute{
-				Required:            true,
+				Required: true,
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1),
+				},
 				MarkdownDescription: "Slug of the Nile workspace that owns the database.",
 			},
 			"database_name": schema.StringAttribute{
-				Required:            true,
+				Required: true,
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1),
+				},
 				MarkdownDescription: "Name of the database whose compute instances are listed.",
 			},
 			"start": schema.StringAttribute{
 				Optional: true,
 				Validators: []validator.String{
-					stringvalidator.LengthAtLeast(1),
+					// LengthAtLeast(1) is subsumed: the RFC3339 parser rejects
+					// the empty string, and valid timestamps are never empty.
+					isRFC3339Validator{},
 				},
 				MarkdownDescription: "RFC3339 timestamp marking the start of a time window to search for active instances.",
 			},
 			"end": schema.StringAttribute{
 				Optional: true,
 				Validators: []validator.String{
-					stringvalidator.LengthAtLeast(1),
+					isRFC3339Validator{},
 				},
 				MarkdownDescription: "RFC3339 timestamp marking the end of a time window to search for active instances.",
 			},
@@ -157,21 +168,24 @@ func (d *computeInstancesDataSource) Read(ctx context.Context, req datasource.Re
 	workspaceSlug := data.WorkspaceSlug.ValueString()
 	databaseName := data.DatabaseName.ValueString()
 
-	// Validate the optional time-window parameters early so the user gets
-	// schema-level feedback instead of an opaque upstream 4xx.
-	for name, v := range map[string]types.String{"start": data.Start, "end": data.End} {
-		if !v.IsNull() && !v.IsUnknown() {
-			if _, err := time.Parse(time.RFC3339, v.ValueString()); err != nil {
-				resp.Diagnostics.AddAttributeError(
-					path.Root(name),
-					fmt.Sprintf("Invalid %q value", name),
-					fmt.Sprintf("%q must be an RFC3339 timestamp, got: %q", name, v.ValueString()),
-				)
-			}
+	// Schema-level validators guarantee RFC3339 syntax for start/end; the
+	// coherence of the window itself is checked here (data-source schemas
+	// have no cross-attribute validators in the framework). Unknown values
+	// are deferred: they cannot be ordered before they are known.
+	if !data.Start.IsNull() && !data.Start.IsUnknown() &&
+		!data.End.IsNull() && !data.End.IsUnknown() {
+		start, errStart := time.Parse(time.RFC3339, data.Start.ValueString())
+		end, errEnd := time.Parse(time.RFC3339, data.End.ValueString())
+		if errStart == nil && errEnd == nil && start.After(end) {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("start"),
+				"Invalid time window",
+				fmt.Sprintf("The time window is inverted: start %q is after end %q. "+
+					"Set start to a timestamp earlier than or equal to end.",
+					data.Start.ValueString(), data.End.ValueString()),
+			)
+			return
 		}
-	}
-	if resp.Diagnostics.HasError() {
-		return
 	}
 
 	instances, err := d.client.ListComputeInstances(

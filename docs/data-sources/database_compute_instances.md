@@ -50,10 +50,12 @@ data "nile_database_compute_instances" "historical" {
 
 ## Argument Reference
 
-- `workspace_slug` - (Required) Slug of the Nile workspace that owns the database.
-- `database_name` - (Required) Name of the database whose compute instances are listed.
-- `start` - (Optional) RFC3339 timestamp marking the start of the time window to search for active instances.
+- `workspace_slug` - (Required) Slug of the Nile workspace that owns the database. Must not be empty.
+- `database_name` - (Required) Name of the database whose compute instances are listed. Must not be empty.
+- `start` - (Optional) RFC3339 timestamp marking the start of the time window to search for active instances. Must not be after `end`.
 - `end` - (Optional) RFC3339 timestamp marking the end of the time window to search for active instances.
+
+Invalid timestamps, empty identifiers, and inverted time windows (`start` after `end`) are rejected during `terraform validate`/`plan` (timestamps and identifiers) or before any API call is made (time-window coherence).
 
 ## Attribute Reference
 

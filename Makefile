@@ -5,7 +5,7 @@ OUT_DIR := bin
 
 LD_FLAGS := -X main.version=$(VERSION)
 
-.PHONY: build install test fmt vet smoke clean
+.PHONY: build install test fmt vet license-check smoke clean
 
 build:
 	mkdir -p $(OUT_DIR)
@@ -24,6 +24,15 @@ fmt:
 
 vet:
 	go vet ./...
+
+license-check:
+	@missing=$$(git ls-files '*.go' | xargs -r grep -L 'SPDX-License-Identifier: EUPL-1.2' || true); \
+	if [ -n "$$missing" ]; then \
+		echo "files missing the EUPL-1.2 SPDX header:" >&2; \
+		echo "$$missing" >&2; \
+		exit 1; \
+	fi
+	@echo "all tracked Go files carry the EUPL-1.2 SPDX header"
 
 smoke:
 	tests/smoke/run.sh

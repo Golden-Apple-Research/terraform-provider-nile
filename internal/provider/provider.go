@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Golden Apple Research
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package provider defines the Terraform provider for Nile.
 package provider
 
@@ -110,6 +113,7 @@ func (p *nileProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 		resp.Diagnostics.AddError("Failed to create Nile API client", err.Error())
 		return
 	}
+	client.UserAgent = "terraform-provider-nile/" + p.version
 
 	resp.DataSourceData = client
 	resp.ResourceData = client

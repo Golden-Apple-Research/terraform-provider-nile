@@ -34,16 +34,39 @@ provider_installation {
 }
 EOF
 
-python3 "$ROOT/tests/mockserver.py" "$PORT" >/dev/null 2>&1 &
+python3 "$ROOT/tests/mockserver.py" "$PORT" >"$TMP/mock.log" 2>&1 &
 MOCK_PID=$!
-sleep 1
+
+# Wait for the mock to signal readiness instead of sleeping for a fixed
+# amount of time. This also fails fast, with the log attached, when the
+# process dies (e.g. the port is already taken by a stale run).
+mock_ready=0
+for _ in $(seq 1 100); do
+  if grep -q "listening" "$TMP/mock.log" 2>/dev/null; then
+    mock_ready=1
+    break
+  fi
+  if ! kill -0 "$MOCK_PID" 2>/dev/null; then
+    break
+  fi
+  sleep 0.1
+done
+if [ "$mock_ready" -ne 1 ]; then
+  echo "mock API did not start on port $PORT:" >&2
+  cat "$TMP/mock.log" >&2
+  exit 1
+fi
 
 cp "$ROOT/tests/smoke/main.tf" "$TMP/work/"
 export TF_CLI_CONFIG_FILE="$TMP/terraformrc"
 export NILE_API_TOKEN="$TOKEN"
 
-terraform -chdir="$TMP/work" apply -auto-approve -input=false -no-color \
-  -var="nile_api_url=http://127.0.0.1:$PORT" >/dev/null
+if ! terraform -chdir="$TMP/work" apply -auto-approve -input=false -no-color \
+  -var="nile_api_url=http://127.0.0.1:$PORT" >/dev/null; then
+  echo "terraform apply failed; mock API log:" >&2
+  cat "$TMP/mock.log" >&2
+  exit 1
+fi
 terraform -chdir="$TMP/work" output -json > "$TMP/work/output.json"
 
 python3 - "$TMP/work/output.json" <<'PY'

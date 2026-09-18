@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Golden Apple Research
+// SPDX-License-Identifier: EUPL-1.2
+
 package nileapi
 
 import (
@@ -19,7 +22,7 @@ const sampleInstance = `{
 
 func TestDecodeInstancesBareArray(t *testing.T) {
 	body := []byte("[" + sampleInstance + `, {"instanceId": "inst-2", "status": "TERMINATED"}]`)
-	got, err := decodeInstances(body)
+	got, err := decodeInstances(t.Context(), body)
 	if err != nil {
 		t.Fatalf("decodeInstances failed: %v", err)
 	}
@@ -51,7 +54,7 @@ func TestDecodeInstancesBareArray(t *testing.T) {
 func TestDecodeInstancesWrapper(t *testing.T) {
 	for _, key := range wrapperKeys {
 		body := []byte(`{"` + key + `": [{"instanceId": "wrapped-1"}], "count": 1}`)
-		got, err := decodeInstances(body)
+		got, err := decodeInstances(t.Context(), body)
 		if err != nil {
 			t.Fatalf("key %q: decodeInstances failed: %v", key, err)
 		}
@@ -62,7 +65,7 @@ func TestDecodeInstancesWrapper(t *testing.T) {
 }
 
 func TestDecodeInstancesEmptyArray(t *testing.T) {
-	got, err := decodeInstances([]byte(`[]`))
+	got, err := decodeInstances(t.Context(), []byte(`[]`))
 	if err != nil {
 		t.Fatalf("decodeInstances failed: %v", err)
 	}
@@ -72,22 +75,23 @@ func TestDecodeInstancesEmptyArray(t *testing.T) {
 }
 
 func TestDecodeInstancesUnknownObject(t *testing.T) {
-	if _, err := decodeInstances([]byte(`{"foo": "bar"}`)); err == nil {
+	if _, err := decodeInstances(t.Context(), []byte(`{"foo": "bar"}`)); err == nil {
 		t.Fatal("expected error for object without an instance array")
 	}
 }
 
 func TestDecodeInstancesWrapperNotArray(t *testing.T) {
-	if _, err := decodeInstances([]byte(`{"instances": {"instanceId": "x"}}`)); err == nil {
+	if _, err := decodeInstances(t.Context(), []byte(`{"instances": {"instanceId": "x"}}`)); err == nil {
 		t.Fatal("expected error for wrapper whose value is not an array")
 	}
 }
 
 func TestListComputeInstances(t *testing.T) {
-	var gotRequestURI, gotAuth, gotStart, gotEnd string
+	var gotRequestURI, gotAuth, gotUA, gotStart, gotEnd string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotRequestURI = r.RequestURI
 		gotAuth = r.Header.Get("Authorization")
+		gotUA = r.Header.Get("User-Agent")
 		q := r.URL.Query()
 		gotStart = q.Get("start")
 		gotEnd = q.Get("end")
@@ -100,6 +104,7 @@ func TestListComputeInstances(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
+	c.UserAgent = "terraform-provider-nile/test"
 	got, err := c.ListComputeInstances(t.Context(), "ws 1", "db/2", "2025-01-01T00:00:00Z", "")
 	if err != nil {
 		t.Fatalf("ListComputeInstances: %v", err)
@@ -111,6 +116,9 @@ func TestListComputeInstances(t *testing.T) {
 	}
 	if gotAuth != "Bearer tok-1" {
 		t.Errorf("auth = %q", gotAuth)
+	}
+	if gotUA != "terraform-provider-nile/test" {
+		t.Errorf("user agent = %q", gotUA)
 	}
 	if gotStart != "2025-01-01T00:00:00Z" || gotEnd != "" {
 		t.Errorf("start=%q end=%q", gotStart, gotEnd)
@@ -139,5 +147,43 @@ func TestListComputeInstancesErrorStatus(t *testing.T) {
 func TestNewClientRequiresToken(t *testing.T) {
 	if _, err := NewClient("", ""); err == nil {
 		t.Fatal("expected error for empty token")
+	}
+}
+
+func TestNewClientRequiresHTTPScheme(t *testing.T) {
+	for _, baseURL := range []string{
+		"global.thenile.dev",       // missing scheme
+		"ftp://global.thenile.dev", // wrong scheme
+		"://thenile.dev",           // unparseable
+	} {
+		if _, err := NewClient(baseURL, "tok"); err == nil {
+			t.Errorf("expected error for base URL %q", baseURL)
+		}
+	}
+}
+
+func TestDecodeInstancesNull(t *testing.T) {
+	// A bare JSON null must not silently decode as an empty list.
+	if _, err := decodeInstances(t.Context(), []byte("null")); err == nil {
+		t.Fatal("expected error for bare null response")
+	}
+	if _, err := decodeInstances(t.Context(), []byte(`{"instances": null}`)); err == nil {
+		t.Fatal("expected error for null wrapper value")
+	}
+}
+
+func TestMapInstancesTypeMismatchKeepsRaw(t *testing.T) {
+	// If the API changes a field type (here instanceId becomes a number),
+	// promotion fails but the raw payload must survive; the mismatch is
+	// surfaced via a log warning (tflog is a no-op without a logger in ctx).
+	got := mapInstances(t.Context(), []json.RawMessage{json.RawMessage(`{"instanceId": 42}`)})
+	if len(got) != 1 {
+		t.Fatalf("expected 1 instance, got %d", len(got))
+	}
+	if got[0].ID != "" {
+		t.Errorf("ID = %q, want empty", got[0].ID)
+	}
+	if string(got[0].Raw) != `{"instanceId": 42}` {
+		t.Errorf("Raw = %q", got[0].Raw)
 	}
 }

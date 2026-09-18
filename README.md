@@ -98,6 +98,11 @@ valid semver version that satisfies the version constraint of the
 configuration (the examples use `~> 0.1`); the default `VERSION=dev` is not
 installable.
 
+## License
+
+This provider is licensed under the [European Union Public License, Version 1.2](LICENSE)
+(SPIDX identifier: `EUPL-1.2`).
+
 ### Publishing
 
 The provider address `registry.terraform.io/golden-apple-research/nile`

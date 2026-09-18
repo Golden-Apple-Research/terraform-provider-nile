@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Golden Apple Research
+// SPDX-License-Identifier: EUPL-1.2
+
 // terraform-provider-nile is a Terraform provider for the Nile control plane
 // API (https://www.thenile.dev).
 package main

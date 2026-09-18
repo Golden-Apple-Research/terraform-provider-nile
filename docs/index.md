@@ -48,3 +48,7 @@ The API base URL can be configured using either the `api_url` provider argument 
 ## Data Sources
 
 - [`nile_database_compute_instances`](data-sources/database_compute_instances) - Lists dedicated compute instances attached to a Nile database.
+
+## License
+
+Licensed under the [European Union Public License, Version 1.2](https://opensource.org/license/EUPL-1.2) (SPDX: `EUPL-1.2`).

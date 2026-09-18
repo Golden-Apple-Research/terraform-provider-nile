@@ -73,4 +73,8 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 18080
+    # Signal readiness (and catch bind failures, e.g. port already in use)
+    # before serving, so start scripts can wait on this line instead of
+    # sleeping for a fixed amount of time.
+    print(f"[mock] listening on http://127.0.0.1:{port}", file=sys.stderr, flush=True)
     HTTPServer(("127.0.0.1", port), Handler).serve_forever()
