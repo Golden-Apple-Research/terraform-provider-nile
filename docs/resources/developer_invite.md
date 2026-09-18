@@ -21,18 +21,38 @@ resource "nile_developer_invite" "example" {
 ```
 
 ## Argument Reference
-  - `email` - (Required) Email address of the invitee. Changing it forces replacement.
-  - `workspace_slug` - (Required) Slug of the workspace to invite the developer to. Changing it forces replacement.
+
+The following arguments are supported:
+
+- `email` - (Required) Email address of the invitee. Changing it forces replacement.
+- `programmatic` - (Optional) If true, the API returns an invite code instead of only sending an email. Changing it forces replacement.
+- `workspace_slug` - (Required) Slug of the workspace to invite the developer to. Changing it forces replacement.
 
 ## Attribute Reference
-  - `code` - (Computed, Sensitive) Invite code, only returned when `programmatic = true`. Stored in state at creation and never copied from later API responses.
-  - `created` - (Computed) Creation timestamp.
-  - `id` - (Computed) Invite identifier.
-  - `programmatic` - (Optional, Computed) If true, the API returns an invite code instead of only sending an email. Changing it forces replacement.
-  - `raw_json` - (Computed, Sensitive) Redacted JSON payload of the invite as returned by the API.
-  - `sender_email` - (Computed) Email address of the developer who sent the invite.
-  - `updated` - (Computed) Last update timestamp.
-  - `verification_state` - (Computed) Verification state (`EMAIL_PENDING`, `EMAIL_SENT`, `VERIFIED` or `EXPIRED`).
+
+In addition to the arguments above, the following attributes are exported:
+
+- `code` - (Computed, Sensitive) Invite code, only returned when `programmatic = true`. Stored in state at creation and never copied from later API responses.
+- `created` - (Computed) Creation timestamp.
+- `id` - (Computed) Invite identifier.
+- `programmatic` - (Computed) If true, the API returns an invite code instead of only sending an email. Changing it forces replacement.
+- `raw_json` - (Computed, Sensitive) Redacted JSON payload of the invite as returned by the API.
+- `sender_email` - (Computed) Email address of the developer who sent the invite.
+- `updated` - (Computed) Last update timestamp.
+- `verification_state` - (Computed) Verification state (`EMAIL_PENDING`, `EMAIL_SENT`, `VERIFIED` or `EXPIRED`).
+
+## Notes
+
+### Email vs. programmatic invites
+
+With `programmatic = true` the API returns a one-time invite code in the sensitive
+`code` attribute instead of only sending an email. The code is returned once and
+never copied from later responses.
+
+### Replacement
+
+There is no invite update endpoint, so changing `email` or `programmatic` forces
+replacement.
 
 ## Import
 

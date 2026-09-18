@@ -58,6 +58,7 @@ var dataSourceTargets = []struct {
 }{
 	{target{"database", "Databases"}, provider.NewDatabaseDataSource},
 	{target{"databases", "Databases"}, provider.NewDatabasesDataSource},
+	{target{"database_compute_instances", "Databases"}, provider.NewDatabaseComputeInstancesDataSource},
 	{target{"database_credentials", "Databases"}, provider.NewDatabaseCredentialsDataSource},
 	{target{"database_uptime_insights", "Databases"}, provider.NewDatabaseUptimeInsightsDataSource},
 	{target{"database_error_insights", "Databases"}, provider.NewDatabaseErrorInsightsDataSource},
@@ -74,6 +75,87 @@ var dataSourceTargets = []struct {
 	{target{"workspace_billing_readiness", "Workspaces"}, provider.NewWorkspaceBillingReadinessDataSource},
 	{target{"workspace_billing_totals", "Workspaces"}, provider.NewWorkspaceBillingTotalsDataSource},
 	{target{"developer", "Developers"}, provider.NewDeveloperDataSource},
+}
+
+// codeSpanMark stands in for a backtick inside the raw-string literals in
+// notes. render replaces it before writing, which keeps the note literals free
+// of string concatenation while still producing Markdown inline code.
+const codeSpanMark = "§"
+
+// notes holds extra prose appended as a "Notes" section, keyed by
+// "<docs dir>/<name>". Use it for operational behavior that is not part of the
+// schema (asynchronous waits, one-time secrets, pagination, retries) and for
+// cross-links to related pages. Links must carry the .md extension so they
+// resolve on GitHub as well as in the Terraform Registry.
+var notes = map[string]string{
+	"resources/database": `### Asynchronous lifecycle
+
+Creating a database and renaming it (§name§) are asynchronous. The resource
+polls the API until the database reports §READY§ before it completes, so
+dependent resources such as [nile_database_compute_instance](database_compute_instance.md)
+and [nile_database_credential](database_credential.md) can be created in the same
+apply. Waiting is bounded by the §create§ and §update§ timeouts; deletion is
+bounded by the §delete§ timeout.
+
+### Partial success
+
+If the API has already created or renamed the database when a later wait fails,
+the resource is still recorded in state, so a subsequent refresh can adopt it
+instead of orphaning it.`,
+	"resources/database_compute_instance": `### Asynchronous lifecycle
+
+Creating, resizing (§instance_size§) and deleting an instance are asynchronous:
+the resource waits until the instance reports §READY§ (or disappears on delete)
+before it completes. Renaming (§instance_name§) updates the instance in place.
+
+### Discovering sizes
+
+Use the [nile_compute_types](../data-sources/compute_types.md) data source to
+list valid §instance_size§ values for a workspace, and the
+[nile_database_compute_instances](../data-sources/database_compute_instances.md)
+data source to inspect the instances that already exist.`,
+	"resources/database_credential": `### One-time password
+
+The API returns the credential password exactly once, in the create response. It
+is stored in state as a sensitive value and is never copied from later responses.
+
+### Rotation
+
+The API has no credential update endpoint, so changing §tenant_id§ or §internal§
+forces replacement. To rotate the password in place, use the §RotateCredential§
+client method or the Nile API directly.`,
+	"resources/developer_invite": `### Email vs. programmatic invites
+
+With §programmatic = true§ the API returns a one-time invite code in the sensitive
+§code§ attribute instead of only sending an email. The code is returned once and
+never copied from later responses.
+
+### Replacement
+
+There is no invite update endpoint, so changing §email§ or §programmatic§ forces
+replacement.`,
+	"data-sources/database_compute_instances": `### Time window
+
+Set §start§ and §end§ to RFC3339 timestamps to restrict the result to instances
+that were active during that period. §start§ must not be later than §end§; the
+provider rejects an inverted window before making any API call.
+
+### Pagination
+
+The Nile API currently returns all matching instances in a single response. If it
+ever introduces pagination (a response object carrying a continuation token such
+as §nextPageToken§), the provider follows the token automatically and concatenates
+all pages, so §instances§ always contains the complete result. Safety guards abort
+with an error if a server fails to advance its page tokens.
+
+### Retries
+
+Transient failures — HTTP §408§, §429§, §5xx§, and network errors — are retried up
+to three times with exponential backoff and jitter for replay-safe methods. A
+§Retry-After§ response header takes precedence over the computed backoff (capped
+at 30 seconds). Client errors such as §400§ or §401§ are never retried.`,
+	"data-sources/workspace_billing_readiness": `This data source only inspects the workspace's billing state. It never creates
+a billing customer; use the §EnsureBillingCustomer§ client method for that.`,
 }
 
 // importIDs maps resource names to their terraform import identifier format.
@@ -114,6 +196,10 @@ var examples = map[string]string{
   workspace_slug = "my-workspace"
 }`,
 	"data-sources/database_credentials": `data "nile_database_credentials" "example" {
+  workspace_slug = "my-workspace"
+  database_name  = "app-database"
+}`,
+	"data-sources/database_compute_instances": `data "nile_database_compute_instances" "example" {
   workspace_slug = "my-workspace"
   database_name  = "app-database"
 }`,
@@ -238,30 +324,47 @@ func render(dir, kind, typeName, description string, attrs map[string]attribute,
 	}
 	sort.Strings(names)
 
-	required := make([]string, 0, len(names))
-	computed := make([]string, 0, len(names))
+	// Arguments are everything a practitioner may configure: required and
+	// optional attributes, including optional-and-computed ones. Attributes are
+	// the values the provider exports. An optional-and-computed attribute is
+	// documented in both sections, matching the Terraform Registry convention.
+	arguments := make([]string, 0, len(names))
+	attributes := make([]string, 0, len(names))
 	for _, name := range names {
-		if attrs[name].IsRequired() {
-			required = append(required, name)
-		} else {
-			computed = append(computed, name)
+		if attrs[name].IsRequired() || attrs[name].IsOptional() {
+			arguments = append(arguments, name)
+		}
+		if attrs[name].IsComputed() {
+			attributes = append(attributes, name)
 		}
 	}
 
-	b.WriteString("\n## Argument Reference\n")
-	if len(required) == 0 {
-		b.WriteString("\nThis object has no required arguments.\n")
-	}
-	for _, name := range required {
-		writeAttribute(&b, attrs[name], name, "  ")
+	b.WriteString("\n## Argument Reference\n\n")
+	if len(arguments) == 0 {
+		b.WriteString("This object has no arguments.\n")
+	} else {
+		b.WriteString("The following arguments are supported:\n\n")
+		for _, name := range arguments {
+			writeAttribute(&b, attrs[name], name, "", "argument")
+		}
 	}
 
-	b.WriteString("\n## Attribute Reference\n")
-	if len(computed) == 0 {
-		b.WriteString("\nThis object has no computed attributes.\n")
+	b.WriteString("\n## Attribute Reference\n\n")
+	switch {
+	case len(attributes) == 0:
+		b.WriteString("This object has no additional attributes.\n")
+	case len(arguments) == 0:
+		b.WriteString("The following attributes are exported:\n\n")
+	default:
+		b.WriteString("In addition to the arguments above, the following attributes are exported:\n\n")
 	}
-	for _, name := range computed {
-		writeAttribute(&b, attrs[name], name, "  ")
+	for _, name := range attributes {
+		writeAttribute(&b, attrs[name], name, "", "attribute")
+	}
+
+	if note := notes[dir+"/"+shortName(typeName)]; note != "" {
+		b.WriteString("\n## Notes\n\n")
+		b.WriteString(strings.ReplaceAll(strings.TrimSpace(note), codeSpanMark, "`") + "\n")
 	}
 
 	if importID != "" {
@@ -270,15 +373,18 @@ func render(dir, kind, typeName, description string, attrs map[string]attribute,
 	return b.String()
 }
 
-func writeAttribute(b *strings.Builder, a attribute, name, indent string) {
+// writeAttribute renders one attribute and, recursively, its nested attributes.
+// section is "argument" or "attribute" and selects the mode label: an
+// optional-and-computed attribute is "Optional" where it can be configured and
+// "Computed" where it is exported.
+func writeAttribute(b *strings.Builder, a attribute, name, indent, section string) {
 	mode := "Computed"
-	switch {
-	case a.IsRequired():
-		mode = "Required"
-	case a.IsOptional() && a.IsComputed():
-		mode = "Optional, Computed"
-	case a.IsOptional():
-		mode = "Optional"
+	if section == "argument" {
+		if a.IsRequired() {
+			mode = "Required"
+		} else {
+			mode = "Optional"
+		}
 	}
 	if a.IsSensitive() {
 		mode += ", Sensitive"
@@ -298,7 +404,7 @@ func writeAttribute(b *strings.Builder, a attribute, name, indent string) {
 		}
 		sort.Strings(nestedNames)
 		for _, n := range nestedNames {
-			writeAttribute(b, nested[n], n, indent+"  ")
+			writeAttribute(b, nested[n], n, indent+"  ", section)
 		}
 	}
 }

@@ -22,18 +22,39 @@ resource "nile_database_credential" "example" {
 ```
 
 ## Argument Reference
-  - `database_name` - (Required) Name of the database the credential belongs to. Changing it forces replacement.
-  - `workspace_slug` - (Required) Slug of the Nile workspace that owns the database. Changing it forces replacement.
+
+The following arguments are supported:
+
+- `database_name` - (Required) Name of the database the credential belongs to. Changing it forces replacement.
+- `internal` - (Optional) Whether to create an internal credential (`internal` query parameter). Changing it forces replacement.
+- `tenant_id` - (Optional) Tenant the credential is scoped to (`tenantId` query parameter). Changing it forces replacement.
+- `workspace_slug` - (Required) Slug of the Nile workspace that owns the database. Changing it forces replacement.
 
 ## Attribute Reference
-  - `api_host` - (Computed) Host of the database's API endpoint.
-  - `created` - (Computed) Creation timestamp.
-  - `db_host` - (Computed) Host of the database's PostgreSQL endpoint, if provisioned.
-  - `id` - (Computed) Credential identifier.
-  - `internal` - (Optional, Computed) Whether to create an internal credential (`internal` query parameter). Changing it forces replacement.
-  - `password` - (Computed, Sensitive) Password of the credential. The API returns it only once, at creation time; it is stored in state and never copied from later API responses.
-  - `raw_json` - (Computed, Sensitive) Redacted JSON payload of the credential as returned by the API.
-  - `tenant_id` - (Optional, Computed) Tenant the credential is scoped to (`tenantId` query parameter). Changing it forces replacement.
+
+In addition to the arguments above, the following attributes are exported:
+
+- `api_host` - (Computed) Host of the database's API endpoint.
+- `created` - (Computed) Creation timestamp.
+- `db_host` - (Computed) Host of the database's PostgreSQL endpoint, if provisioned.
+- `id` - (Computed) Credential identifier.
+- `internal` - (Computed) Whether to create an internal credential (`internal` query parameter). Changing it forces replacement.
+- `password` - (Computed, Sensitive) Password of the credential. The API returns it only once, at creation time; it is stored in state and never copied from later API responses.
+- `raw_json` - (Computed, Sensitive) Redacted JSON payload of the credential as returned by the API.
+- `tenant_id` - (Computed) Tenant the credential is scoped to (`tenantId` query parameter). Changing it forces replacement.
+
+## Notes
+
+### One-time password
+
+The API returns the credential password exactly once, in the create response. It
+is stored in state as a sensitive value and is never copied from later responses.
+
+### Rotation
+
+The API has no credential update endpoint, so changing `tenant_id` or `internal`
+forces replacement. To rotate the password in place, use the `RotateCredential`
+client method or the Nile API directly.
 
 ## Import
 

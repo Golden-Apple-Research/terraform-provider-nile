@@ -19,19 +19,25 @@ data "nile_database_credentials" "example" {
 ```
 
 ## Argument Reference
-  - `database_name` - (Required) Name of the database whose credentials are listed.
-  - `workspace_slug` - (Required) Slug of the Nile workspace that owns the database.
+
+The following arguments are supported:
+
+- `database_name` - (Required) Name of the database whose credentials are listed.
+- `internal` - (Optional) Only list credentials with this internal flag (`internal` query parameter).
+- `tenant_id` - (Optional) Only list credentials scoped to this tenant (`tenantId` query parameter).
+- `workspace_slug` - (Required) Slug of the Nile workspace that owns the database.
 
 ## Attribute Reference
-  - `credentials` - (Computed) The credentials found for the database.
-    - `api_host` - (Computed) Host of the database's API endpoint.
-    - `created` - (Computed) Creation timestamp.
-    - `db_host` - (Computed) Host of the database's PostgreSQL endpoint, if provisioned.
-    - `id` - (Computed) Credential identifier.
-    - `internal` - (Computed) Whether this is an internal credential.
-    - `raw_json` - (Computed, Sensitive) Redacted JSON payload of the credential as returned by the API.
-    - `tenant` - (Computed) Tenant the credential is scoped to (`tenant` in the API response).
-  - `id` - (Computed) Stable identifier of this data source instance (`<workspaceSlug>/<databaseName>`).
-  - `internal` - (Optional) Only list credentials with this internal flag (`internal` query parameter).
-  - `tenant_id` - (Optional) Only list credentials scoped to this tenant (`tenantId` query parameter).
+
+In addition to the arguments above, the following attributes are exported:
+
+- `credentials` - (Computed) The credentials found for the database.
+  - `api_host` - (Computed) Host of the database's API endpoint.
+  - `created` - (Computed) Creation timestamp.
+  - `db_host` - (Computed) Host of the database's PostgreSQL endpoint, if provisioned.
+  - `id` - (Computed) Credential identifier.
+  - `internal` - (Computed) Whether this is an internal credential.
+  - `raw_json` - (Computed, Sensitive) Redacted JSON payload of the credential as returned by the API.
+  - `tenant` - (Computed) Tenant the credential is scoped to (`tenant` in the API response).
+- `id` - (Computed) Stable identifier of this data source instance (`<workspaceSlug>/<databaseName>`).
 

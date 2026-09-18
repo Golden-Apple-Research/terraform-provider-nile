@@ -18,9 +18,15 @@ data "nile_regions" "example" {
 ```
 
 ## Argument Reference
-  - `workspace_slug` - (Required) Slug of the workspace whose regions are listed.
+
+The following arguments are supported:
+
+- `workspace_slug` - (Required) Slug of the workspace whose regions are listed.
 
 ## Attribute Reference
-  - `id` - (Computed) Stable identifier of this data source instance (the workspace slug).
-  - `regions` - (Computed) Region identifiers available to the workspace.
+
+In addition to the arguments above, the following attributes are exported:
+
+- `id` - (Computed) Stable identifier of this data source instance (the workspace slug).
+- `regions` - (Computed) Region identifiers available to the workspace.
 

@@ -16,11 +16,17 @@ data "nile_workspace" "example" {
 ```
 
 ## Argument Reference
-  - `slug` - (Required) Globally unique slug of the workspace.
+
+The following arguments are supported:
+
+- `slug` - (Required) Globally unique slug of the workspace.
 
 ## Attribute Reference
-  - `created` - (Computed) Creation timestamp.
-  - `id` - (Computed) Workspace identifier (`id` in the API response).
-  - `name` - (Computed) Workspace name.
-  - `stripe_customer_id` - (Computed) Stripe customer linked to the workspace, if any.
+
+In addition to the arguments above, the following attributes are exported:
+
+- `created` - (Computed) Creation timestamp.
+- `id` - (Computed) Workspace identifier (`id` in the API response).
+- `name` - (Computed) Workspace name.
+- `stripe_customer_id` - (Computed) Stripe customer linked to the workspace, if any.
 

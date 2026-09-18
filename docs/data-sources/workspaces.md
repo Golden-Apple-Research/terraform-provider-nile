@@ -15,14 +15,17 @@ data "nile_workspaces" "example" {}
 
 ## Argument Reference
 
-This object has no required arguments.
+This object has no arguments.
 
 ## Attribute Reference
-  - `id` - (Computed) Stable identifier of this data source instance (`workspaces`).
-  - `workspaces` - (Computed) The workspaces visible to the authenticated developer.
-    - `created` - (Computed) Creation timestamp.
-    - `id` - (Computed) Workspace identifier (`id` in the API response).
-    - `name` - (Computed) Workspace name.
-    - `slug` - (Computed) Globally unique workspace slug used in API paths.
-    - `stripe_customer_id` - (Computed) Stripe customer linked to the workspace, if any.
+
+The following attributes are exported:
+
+- `id` - (Computed) Stable identifier of this data source instance (`workspaces`).
+- `workspaces` - (Computed) The workspaces visible to the authenticated developer.
+  - `created` - (Computed) Creation timestamp.
+  - `id` - (Computed) Workspace identifier (`id` in the API response).
+  - `name` - (Computed) Workspace name.
+  - `slug` - (Computed) Globally unique workspace slug used in API paths.
+  - `stripe_customer_id` - (Computed) Stripe customer linked to the workspace, if any.
 

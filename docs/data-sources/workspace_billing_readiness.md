@@ -17,18 +17,29 @@ data "nile_workspace_billing_readiness" "example" {
 ```
 
 ## Argument Reference
-  - `workspace_slug` - (Required) Slug of the workspace whose billing readiness is read.
+
+The following arguments are supported:
+
+- `workspace_slug` - (Required) Slug of the workspace whose billing readiness is read.
 
 ## Attribute Reference
-  - `checked_at` - (Computed) Timestamp of the check.
-  - `default_payment_method_id` - (Computed) Default payment method of the customer, if any.
-  - `detail` - (Computed) Human-readable detail about the readiness result.
-  - `id` - (Computed) Stable identifier of this data source instance (the workspace slug).
-  - `last_error` - (Computed) Last error observed while resolving billing state, if any.
-  - `raw_json` - (Computed, Sensitive) Redacted JSON payload of the response as returned by the API.
-  - `source` - (Computed) Source of the readiness result.
-  - `status` - (Computed) Readiness status (`ready`, `missing_customer`, `missing_payment_method`, `lookup_failed` or `manual_review_required`).
-  - `stripe_customer_id` - (Computed) Stripe customer linked to the workspace, if any.
-  - `workspace` - (Computed) Workspace slug as returned by the API.
-  - `workspace_id` - (Computed) Workspace identifier.
+
+In addition to the arguments above, the following attributes are exported:
+
+- `checked_at` - (Computed) Timestamp of the check.
+- `default_payment_method_id` - (Computed) Default payment method of the customer, if any.
+- `detail` - (Computed) Human-readable detail about the readiness result.
+- `id` - (Computed) Stable identifier of this data source instance (the workspace slug).
+- `last_error` - (Computed) Last error observed while resolving billing state, if any.
+- `raw_json` - (Computed, Sensitive) Redacted JSON payload of the response as returned by the API.
+- `source` - (Computed) Source of the readiness result.
+- `status` - (Computed) Readiness status (`ready`, `missing_customer`, `missing_payment_method`, `lookup_failed` or `manual_review_required`).
+- `stripe_customer_id` - (Computed) Stripe customer linked to the workspace, if any.
+- `workspace` - (Computed) Workspace slug as returned by the API.
+- `workspace_id` - (Computed) Workspace identifier.
+
+## Notes
+
+This data source only inspects the workspace's billing state. It never creates
+a billing customer; use the `EnsureBillingCustomer` client method for that.
 

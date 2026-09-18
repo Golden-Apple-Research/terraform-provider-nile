@@ -4,6 +4,9 @@ A [Terraform](https://www.terraform.io) provider for the
 [Nile](https://www.thenile.dev) control plane API, implementing the full
 [management API](https://www.thenile.dev/docs/api-reference).
 
+Provider configuration, every resource and data source, and the behaviour notes
+are documented under [`docs/index.md`](docs/index.md).
+
 ## Implemented Endpoints
 
 ### Resources
@@ -104,7 +107,7 @@ output "credential_password" {
 ```
 
 Resource and data source details, including all arguments and attributes, are
-documented under [`docs/`](docs/).
+documented under [`docs/index.md`](docs/index.md).
 
 ## Behaviour Notes
 
@@ -146,7 +149,7 @@ documented under [`docs/`](docs/).
 
 ## Development
 
-Requirements: Go ≥ 1.24, Terraform ≥ 1.5, Python 3 (only for the smoke test).
+Requirements: Go ≥ 1.25, Terraform ≥ 1.5, Python 3 (only for the smoke test).
 
 ```sh
 make build   # build the provider binary into bin/
