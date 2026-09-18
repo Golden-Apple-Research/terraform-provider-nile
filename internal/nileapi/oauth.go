@@ -9,12 +9,11 @@ import (
 )
 
 // ExchangeToken calls POST /oauth2/token with the given form values. The
-// provider itself authenticates with a bearer token; this endpoint is exposed
-// for completeness (for example to exchange a refresh token for a new access
-// token).
+// request is sent unauthenticated (no bearer header), as OAuth token
+// endpoints authenticate through the form body itself.
 func (c *Client) ExchangeToken(ctx context.Context, form url.Values) (TokenResponse, error) {
 	var out TokenResponse
-	if err := c.post(ctx, c.endpoint("oauth2", "token"), form, &out); err != nil {
+	if err := c.postUnauthenticated(ctx, c.endpoint("oauth2", "token"), form, &out); err != nil {
 		return TokenResponse{}, err
 	}
 	return out, nil

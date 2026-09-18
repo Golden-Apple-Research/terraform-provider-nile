@@ -25,6 +25,7 @@ var (
 	_ resource.Resource                = &databaseCredentialResource{}
 	_ resource.ResourceWithConfigure   = &databaseCredentialResource{}
 	_ resource.ResourceWithImportState = &databaseCredentialResource{}
+	_ resource.ResourceWithModifyPlan  = &databaseCredentialResource{}
 )
 
 // NewDatabaseCredentialResource constructs the nile_database_credential
@@ -48,6 +49,10 @@ type databaseCredentialResourceModel struct {
 	DBHost        types.String `tfsdk:"db_host"`
 	Created       types.String `tfsdk:"created"`
 	Raw           types.String `tfsdk:"raw_json"`
+
+	RotationTrigger    types.String `tfsdk:"rotation_trigger"`
+	RotationDelayHours types.Int64  `tfsdk:"rotation_delay_hours"`
+	RotationReason     types.String `tfsdk:"rotation_reason"`
 }
 
 func (r *databaseCredentialResource) Metadata(_ context.Context, _ resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -60,8 +65,9 @@ func (r *databaseCredentialResource) Schema(_ context.Context, _ resource.Schema
 			"`/workspaces/{workspaceSlug}/databases/{databaseName}/credentials`. " +
 			"The generated password is returned by the API exactly once and stored in state as a " +
 			"sensitive value; the API cannot return it again. Changing `tenant_id` or `internal` " +
-			"forces replacement, because the API has no update endpoint. Use the `RotateCredential` " +
-			"client method (or the API directly) to rotate a credential in place.",
+			"forces replacement, because the API has no update endpoint. Changing `rotation_trigger` " +
+			"rotates the credential in place via " +
+			"`POST /workspaces/{workspaceSlug}/databases/{databaseName}/credentials/rotate`.",
 		Attributes: map[string]schema.Attribute{
 			"workspace_slug": schema.StringAttribute{
 				Required: true,
@@ -87,8 +93,10 @@ func (r *databaseCredentialResource) Schema(_ context.Context, _ resource.Schema
 				Optional: true,
 				Computed: true,
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					// Null state (live API: empty tenant) plus unknown plan
+					// would otherwise force replacement on every update.
 					stringplanmodifier.UseStateForUnknown(),
+					stringplanmodifier.RequiresReplaceIfConfigured(),
 				},
 				MarkdownDescription: "Tenant the credential is scoped to (`tenantId` query parameter). " +
 					"Changing it forces replacement.",
@@ -97,8 +105,8 @@ func (r *databaseCredentialResource) Schema(_ context.Context, _ resource.Schema
 				Optional: true,
 				Computed: true,
 				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.RequiresReplace(),
 					boolplanmodifier.UseStateForUnknown(),
+					boolplanmodifier.RequiresReplaceIfConfigured(),
 				},
 				MarkdownDescription: "Whether to create an internal credential (`internal` query parameter). " +
 					"Changing it forces replacement.",
@@ -133,6 +141,20 @@ func (r *databaseCredentialResource) Schema(_ context.Context, _ resource.Schema
 				Sensitive:           true,
 				MarkdownDescription: "Redacted JSON payload of the credential as returned by the API.",
 			},
+			"rotation_trigger": schema.StringAttribute{
+				Optional: true,
+				MarkdownDescription: "Arbitrary trigger value: changing it rotates the credential in place " +
+					"(for example a timestamp or release identifier). The value itself is never sent to the API.",
+			},
+			"rotation_delay_hours": schema.Int64Attribute{
+				Optional: true,
+				MarkdownDescription: "When rotating, keep the old secrets valid for this many more hours " +
+					"(`delayOldSecretsExpirationHours`, default 0: old secrets expire immediately).",
+			},
+			"rotation_reason": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Optional reason recorded with the rotation (`reason` request field).",
+			},
 		},
 	}
 }
@@ -150,6 +172,31 @@ func (r *databaseCredentialResource) Configure(_ context.Context, req resource.C
 		return
 	}
 	r.client = client
+}
+
+// ModifyPlan marks the one-time password as unknown whenever a rotation is
+// about to happen: with UseStateForUnknown alone, Terraform would keep the
+// old password in the plan and reject the new one written by Update as an
+// "inconsistent result after apply".
+func (r *databaseCredentialResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		// Create (no state yet) or destroy (no plan): nothing to adjust.
+		return
+	}
+	var plan databaseCredentialResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	var state databaseCredentialResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if plan.RotationTrigger != state.RotationTrigger {
+		plan.Password = types.StringUnknown()
+		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+	}
 }
 
 func (r *databaseCredentialResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -249,14 +296,58 @@ func (r *databaseCredentialResource) Read(ctx context.Context, req resource.Read
 	resp.State.RemoveResource(ctx)
 }
 
-func (r *databaseCredentialResource) Update(_ context.Context, _ resource.UpdateRequest, resp *resource.UpdateResponse) {
-	// Every configurable attribute is ForceNew, so the framework replaces the
-	// resource instead of calling Update.
-	resp.Diagnostics.AddError(
-		"Update not supported",
-		"nile_database_credential does not support in-place updates. This is a provider bug; "+
-			"please report it with the configuration that triggered it.",
-	)
+func (r *databaseCredentialResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	// The identity attributes (workspace, database, tenant, internal) force
+	// replacement; Update therefore only implements in-place rotation,
+	// triggered by a change of rotation_trigger.
+	var plan databaseCredentialResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	var state databaseCredentialResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if r.client == nil {
+		resp.Diagnostics.AddError("Client not configured", "Provider client is nil; was Configure called?")
+		return
+	}
+
+	workspaceSlug := plan.WorkspaceSlug.ValueString()
+	databaseName := plan.DatabaseName.ValueString()
+
+	if plan.RotationTrigger != state.RotationTrigger {
+		var request nileapi.RotateCredentialRequest
+		if !plan.RotationDelayHours.IsNull() {
+			request.DelayOldSecretsExpirationHours = plan.RotationDelayHours.ValueInt64()
+		}
+		request.Reason = plan.RotationReason.ValueString()
+
+		credential, err := r.client.RotateCredential(
+			ctx, workspaceSlug, databaseName,
+			plan.TenantID.ValueString(), optionalBool(plan.Internal), request,
+		)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error rotating database credential",
+				fmt.Sprintf("Could not rotate the credential of database %q in workspace %q: %s",
+					databaseName, workspaceSlug, err.Error()),
+			)
+			return
+		}
+		applyCredentialResource(&plan, credential, workspaceSlug, databaseName)
+		switch {
+		case credential.Password != "":
+			plan.Password = types.StringValue(credential.Password)
+		default:
+			// The rotation response carries no password: keep the one from
+			// state, since ModifyPlan marked the planned value unknown.
+			plan.Password = state.Password
+		}
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 func (r *databaseCredentialResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -313,24 +404,37 @@ func applyCredentialResource(m *databaseCredentialResourceModel, credential nile
 	}
 	if credential.Tenant != "" {
 		m.TenantID = types.StringValue(credential.Tenant)
+	} else if m.TenantID.IsUnknown() {
+		m.TenantID = types.StringNull()
 	}
 	if apiFieldPresent(credential.Raw, "internal") {
 		m.Internal = types.BoolValue(credential.Internal)
 	} else if m.Internal.IsUnknown() {
 		m.Internal = types.BoolNull()
 	}
+	var apiHost, dbHost string
 	if credential.Database != nil {
-		if credential.Database.APIHost != "" {
-			m.APIHost = types.StringValue(credential.Database.APIHost)
-		}
-		if credential.Database.DBHost != "" {
-			m.DBHost = types.StringValue(credential.Database.DBHost)
-		}
+		apiHost = credential.Database.APIHost
+		dbHost = credential.Database.DBHost
+	}
+	if apiHost != "" {
+		m.APIHost = types.StringValue(apiHost)
+	} else if m.APIHost.IsUnknown() {
+		m.APIHost = types.StringNull()
+	}
+	if dbHost != "" {
+		m.DBHost = types.StringValue(dbHost)
+	} else if m.DBHost.IsUnknown() {
+		m.DBHost = types.StringNull()
 	}
 	if credential.Created != "" {
 		m.Created = types.StringValue(credential.Created)
+	} else if m.Created.IsUnknown() {
+		m.Created = types.StringNull()
 	}
 	if len(credential.Raw) > 0 {
 		m.Raw = redactedRawJSON(credential.Raw)
+	} else if m.Raw.IsUnknown() {
+		m.Raw = types.StringNull()
 	}
 }

@@ -9,8 +9,8 @@ Manages a credential of a Nile database via
 `/workspaces/{workspaceSlug}/databases/{databaseName}/credentials`. The generated password is
 returned by the API exactly once and stored in state as a sensitive value; the API cannot return
 it again. Changing `tenant_id` or `internal` forces replacement, because the API has no update
-endpoint. Use the `RotateCredential` client method (or the API directly) to rotate a credential
-in place.
+endpoint. Changing `rotation_trigger` rotates the credential in place via `POST
+/workspaces/{workspaceSlug}/databases/{databaseName}/credentials/rotate`.
 
 ## Example Usage
 
@@ -27,6 +27,9 @@ The following arguments are supported:
 
 - `database_name` - (Required) Name of the database the credential belongs to. Changing it forces replacement.
 - `internal` - (Optional) Whether to create an internal credential (`internal` query parameter). Changing it forces replacement.
+- `rotation_delay_hours` - (Optional) When rotating, keep the old secrets valid for this many more hours (`delayOldSecretsExpirationHours`, default 0: old secrets expire immediately).
+- `rotation_reason` - (Optional) Optional reason recorded with the rotation (`reason` request field).
+- `rotation_trigger` - (Optional) Arbitrary trigger value: changing it rotates the credential in place (for example a timestamp or release identifier). The value itself is never sent to the API.
 - `tenant_id` - (Optional) Tenant the credential is scoped to (`tenantId` query parameter). Changing it forces replacement.
 - `workspace_slug` - (Required) Slug of the Nile workspace that owns the database. Changing it forces replacement.
 

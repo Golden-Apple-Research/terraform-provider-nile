@@ -19,7 +19,7 @@ variable "nile_api_token" {
 
 resource "nile_database" "app" {
   workspace_slug = "my-workspace"
-  name           = "app-database"
+  name           = "app_database"
   region         = "AWS_US_WEST_2"
 }
 

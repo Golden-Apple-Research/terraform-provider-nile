@@ -85,8 +85,8 @@ func (r *developerInviteResource) Schema(_ context.Context, _ resource.SchemaReq
 				Optional: true,
 				Computed: true,
 				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.RequiresReplace(),
 					boolplanmodifier.UseStateForUnknown(),
+					boolplanmodifier.RequiresReplaceIfConfigured(),
 				},
 				MarkdownDescription: "If true, the API returns an invite code instead of only sending an email. " +
 					"Changing it forces replacement.",

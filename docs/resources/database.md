@@ -22,7 +22,8 @@ resource "nile_database" "example" {
 
 The following arguments are supported:
 
-- `name` - (Required) Database name. Renaming updates the database in place via `PUT /workspaces/{workspaceSlug}/databases/{databaseName}`.
+- `claim_code` - (Optional, Sensitive) Claim an already provisioned dedicated database (see `nile_provisioned_database`) instead of creating a new one via `POST /workspaces/{workspaceSlug}/databases/claim`. The claim code is consumed by the claim; changing it forces replacement.
+- `name` - (Optional) Database name. Must match `^[a-zA-Z_][a-zA-Z0-9_]*$` (letters, digits, underscores; must not start with a digit; hyphens are rejected by the live API). Required unless `claim_code` is set (claiming assigns the name server-side). Renaming updates the database in place via `PUT /workspaces/{workspaceSlug}/databases/{databaseName}`.
 - `region` - (Required) Region the database runs in (for example `AWS_US_WEST_2`, `AWS_EU_CENTRAL_1` or `AZURE_EASTUS`). Changing it forces replacement.
 - `timeouts` - (Optional) Timeouts for asynchronous operations. Unspecified operations use the default of `20m`.
   - `create` - (Optional) Time to wait for the resource to be created and become ready. Defaults to `20m`.
@@ -40,6 +41,7 @@ In addition to the arguments above, the following attributes are exported:
 - `deleted` - (Computed) Timestamp at which the database was marked for deletion, if any.
 - `expandable` - (Computed) Whether the database can be expanded with read replicas (`expandable` in the API response).
 - `id` - (Computed) Database identifier (`id` in the API response).
+- `name` - (Computed) Database name. Must match `^[a-zA-Z_][a-zA-Z0-9_]*$` (letters, digits, underscores; must not start with a digit; hyphens are rejected by the live API). Required unless `claim_code` is set (claiming assigns the name server-side). Renaming updates the database in place via `PUT /workspaces/{workspaceSlug}/databases/{databaseName}`.
 - `parent_id` - (Computed) Identifier of the parent (primary) database for read replicas.
 - `parent_name` - (Computed) Name of the parent (primary) database for read replicas.
 - `raw_json` - (Computed, Sensitive) Redacted JSON payload of the database as returned by the API.

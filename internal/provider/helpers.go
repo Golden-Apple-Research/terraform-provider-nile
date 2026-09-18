@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -106,12 +107,21 @@ func apiFieldPresent(raw json.RawMessage, field string) bool {
 	return present
 }
 
+// urlCredentialPattern matches userinfo credentials embedded in URL values,
+// such as "postgres://user:secret@host/db" inside the env object of a
+// provisioning response.
+var urlCredentialPattern = regexp.MustCompile(`://[^/@:\s]+:[^/@\s]+@`)
+
 func redactJSONSecrets(value any) {
 	switch value := value.(type) {
 	case map[string]any:
 		for key, child := range value {
 			if isSensitiveJSONKey(key) {
 				value[key] = "[REDACTED]"
+				continue
+			}
+			if text, ok := child.(string); ok {
+				value[key] = urlCredentialPattern.ReplaceAllString(text, "://[REDACTED]@")
 				continue
 			}
 			redactJSONSecrets(child)

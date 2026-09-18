@@ -32,21 +32,24 @@ func insightsArgs() map[string]schema.Attribute {
 			Validators: []validator.String{
 				stringvalidator.LengthAtLeast(1),
 			},
-			MarkdownDescription: "Name or identifier of the database. The API path names this parameter `databaseId`.",
+			MarkdownDescription: "Identifier (id) of the database. The API path names this parameter `databaseId`; " +
+				"the live API rejects database names here with `Invalid id`. Use the `id` attribute of `nile_database`.",
 		},
 		"start": schema.StringAttribute{
 			Optional: true,
 			Validators: []validator.String{
 				isRFC3339Validator{},
 			},
-			MarkdownDescription: "RFC3339 timestamp marking the start of the metrics window (`start` query parameter).",
+			MarkdownDescription: "RFC3339 timestamp marking the start of the metrics window (`start` query parameter). " +
+				"Must be aligned to whole minutes; the live API rejects sub-minute timestamps.",
 		},
 		"end": schema.StringAttribute{
 			Optional: true,
 			Validators: []validator.String{
 				isRFC3339Validator{},
 			},
-			MarkdownDescription: "RFC3339 timestamp marking the end of the metrics window (`end` query parameter).",
+			MarkdownDescription: "RFC3339 timestamp marking the end of the metrics window (`end` query parameter). " +
+				"Must be aligned to whole minutes; the live API rejects sub-minute timestamps.",
 		},
 		"granularity": schema.StringAttribute{
 			Optional:            true,

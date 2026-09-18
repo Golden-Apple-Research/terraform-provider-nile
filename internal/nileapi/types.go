@@ -408,8 +408,16 @@ func (t *workspaceMonthlyTotalsAlias) setRaw(raw json.RawMessage) { t.Raw = raw 
 // schema, so only the claim code is promoted and the full payload stays
 // available in Raw.
 type ProvisionedDatabase struct {
-	ClaimCode string          `json:"claimCode"`
-	Raw       json.RawMessage `json:"-"`
+	ClaimCode    string            `json:"claimCode"`
+	DatabaseID   string            `json:"databaseId"`
+	DatabaseName string            `json:"databaseName"`
+	APIHost      string            `json:"apiHost"`
+	DBHost       string            `json:"dbHost"`
+	CredentialID string            `json:"credentialId"`
+	Password     string            `json:"password"`
+	Sharded      bool              `json:"sharded"`
+	Env          map[string]string `json:"env"`
+	Raw          json.RawMessage   `json:"-"`
 }
 
 func (p *ProvisionedDatabase) UnmarshalJSON(data []byte) error {

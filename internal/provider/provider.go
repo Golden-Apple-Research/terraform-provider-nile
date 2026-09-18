@@ -7,6 +7,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -20,8 +21,10 @@ import (
 )
 
 const (
-	envAPIURL   = "NILE_API_URL"
-	envAPIToken = "NILE_API_TOKEN"
+	envAPIURL            = "NILE_API_URL"
+	envAPIToken          = "NILE_API_TOKEN"
+	envOAuthClientID     = "NILE_OAUTH_CLIENT_ID"
+	envOAuthRefreshToken = "NILE_OAUTH_REFRESH_TOKEN"
 )
 
 // New instantiates the provider.
@@ -51,15 +54,26 @@ func (p *nileProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp 
 			"api_token": schema.StringAttribute{
 				Optional:            true,
 				Sensitive:           true,
-				MarkdownDescription: "Bearer token used to authenticate against the Nile API. May also be set via `" + envAPIToken + "`.",
+				MarkdownDescription: "Bearer token used to authenticate against the Nile API. May also be set via `" + envAPIToken + "`. Takes precedence over OAuth authentication.",
+			},
+			"oauth_client_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "OAuth client ID used when exchanging a refresh token for an access token. May also be set via `" + envOAuthClientID + "`.",
+			},
+			"oauth_refresh_token": schema.StringAttribute{
+				Optional:            true,
+				Sensitive:           true,
+				MarkdownDescription: "OAuth refresh token exchanged for an access token via `POST /oauth2/token` when no static `api_token` is configured. May also be set via `" + envOAuthRefreshToken + "`.",
 			},
 		},
 	}
 }
 
 type providerData struct {
-	APIToken types.String `tfsdk:"api_token"`
-	APIURL   types.String `tfsdk:"api_url"`
+	APIToken          types.String `tfsdk:"api_token"`
+	APIURL            types.String `tfsdk:"api_url"`
+	OAuthClientID     types.String `tfsdk:"oauth_client_id"`
+	OAuthRefreshToken types.String `tfsdk:"oauth_refresh_token"`
 }
 
 func (p *nileProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
@@ -98,12 +112,58 @@ func (p *nileProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 	if !config.APIToken.IsNull() && config.APIToken.ValueString() != "" {
 		apiToken = config.APIToken.ValueString()
 	}
+	// Without a static token, fall back to exchanging an OAuth refresh
+	// token for an access token.
+	if apiToken == "" {
+		oauthClientID := os.Getenv(envOAuthClientID)
+		if !config.OAuthClientID.IsNull() && config.OAuthClientID.ValueString() != "" {
+			oauthClientID = config.OAuthClientID.ValueString()
+		}
+		oauthRefreshToken := os.Getenv(envOAuthRefreshToken)
+		if !config.OAuthRefreshToken.IsNull() && config.OAuthRefreshToken.ValueString() != "" {
+			oauthRefreshToken = config.OAuthRefreshToken.ValueString()
+		}
+		if oauthRefreshToken != "" {
+			form := url.Values{
+				"grant_type":    {"refresh_token"},
+				"refresh_token": {oauthRefreshToken},
+			}
+			if oauthClientID != "" {
+				form.Set("client_id", oauthClientID)
+			}
+			// The bootstrap client never sends its placeholder token: the
+			// exchange request goes out unauthenticated.
+			boot, err := nileapi.NewClient(apiURL, "oauth-exchange")
+			if err != nil {
+				resp.Diagnostics.AddError("Failed to create Nile API client", err.Error())
+				return
+			}
+			token, err := boot.ExchangeToken(ctx, form)
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"OAuth token exchange failed",
+					fmt.Sprintf("Exchanging the refresh token for an access token against %s failed: %s", apiURL, err.Error()),
+				)
+				return
+			}
+			if token.AccessToken == "" {
+				resp.Diagnostics.AddError(
+					"OAuth token exchange returned no access token",
+					fmt.Sprintf("The token response from %s did not contain an access_token.", apiURL),
+				)
+				return
+			}
+			apiToken = token.AccessToken
+		}
+	}
 	if apiToken == "" {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("api_token"),
 			"Missing Nile API token",
 			fmt.Sprintf("The provider cannot create the Nile API client as there is no API token configured. "+
-				"Set the api_token attribute in the provider block or the %s environment variable.", envAPIToken),
+				"Set the api_token attribute in the provider block, the %s environment variable, "+
+				"or configure OAuth via oauth_refresh_token (or %s).",
+				envAPIToken, envOAuthRefreshToken),
 		)
 		return
 	}
@@ -149,5 +209,9 @@ func (p *nileProvider) Resources(ctx context.Context) []func() resource.Resource
 		NewComputeInstanceResource,
 		NewDatabaseCredentialResource,
 		NewDeveloperInviteResource,
+		NewWorkspaceResource,
+		NewWorkspaceSubscriptionResource,
+		NewBillingCustomerResource,
+		NewProvisionedDatabaseResource,
 	}
 }

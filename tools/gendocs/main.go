@@ -50,6 +50,10 @@ var resourceTargets = []struct {
 	{target{"database_compute_instance", "Databases"}, provider.NewComputeInstanceResource},
 	{target{"database_credential", "Databases"}, provider.NewDatabaseCredentialResource},
 	{target{"developer_invite", "Developers"}, provider.NewDeveloperInviteResource},
+	{target{"workspace", "Workspaces"}, provider.NewWorkspaceResource},
+	{target{"workspace_subscription", "Workspaces"}, provider.NewWorkspaceSubscriptionResource},
+	{target{"billing_customer", "Workspaces"}, provider.NewBillingCustomerResource},
+	{target{"provisioned_database", "Databases"}, provider.NewProvisionedDatabaseResource},
 }
 
 var dataSourceTargets = []struct {
@@ -155,7 +159,35 @@ to three times with exponential backoff and jitter for replay-safe methods. A
 §Retry-After§ response header takes precedence over the computed backoff (capped
 at 30 seconds). Client errors such as §400§ or §401§ are never retried.`,
 	"data-sources/workspace_billing_readiness": `This data source only inspects the workspace's billing state. It never creates
-a billing customer; use the §EnsureBillingCustomer§ client method for that.`,
+a billing customer; use the §nile_billing_customer§ resource for that.`,
+	"resources/workspace": `### Session-token authentication
+
+Creating a workspace is rejected with 403 §forbidden_operation§ when the
+provider authenticates with an API key; use OAuth credentials
+(§oauth_client_id§/§oauth_refresh_token§) or a session token instead.
+
+### Deletion is state-only
+
+The Nile API does not expose workspace deletion. Destroying this resource
+removes it from Terraform state but leaves the workspace running in the
+control plane.`,
+	"resources/workspace_subscription": `### Level changes
+
+Changing §level§ updates the subscription in place via the change endpoint.
+Destroying the resource closes the subscription. Billing endpoints require a
+session (developer) token; API keys are rejected with 403.`,
+	"resources/billing_customer": `### Idempotent ensure
+
+Create, read and update all issue the same idempotent call that finds or
+creates the Stripe customer for the workspace. The API cannot unlink a billing
+customer, so destroy only removes the resource from state.`,
+	"resources/provisioned_database": `### Claim flow
+
+The provisioning call is unauthenticated and returns a one-time claim code.
+Consume it with the §claim_code§ attribute of §nile_database§ to attach the
+dedicated database to a workspace. Dedicated compute requires a paid plan; the
+free tier answers with 403. No read or delete endpoint exists for provisioned
+databases, so refresh and destroy perform no API call.`,
 }
 
 // importIDs maps resource names to their terraform import identifier format.
@@ -164,6 +196,9 @@ var importIDs = map[string]string{
 	"database_compute_instance": "my-workspace/app-database/inst-abc123",
 	"database_credential":       "my-workspace/app-database/cred-abc123",
 	"developer_invite":          "my-workspace/inv-abc123",
+	"workspace":                 "my-workspace",
+	"workspace_subscription":    "my-workspace",
+	"billing_customer":          "my-workspace",
 }
 
 // examples holds a short HCL block per object, keyed by "<docs dir>/<name>".
@@ -187,6 +222,25 @@ var examples = map[string]string{
   workspace_slug = "my-workspace"
   email          = "qa@example.com"
   programmatic   = true
+}`,
+	"resources/workspace": `resource "nile_workspace" "example" {
+  name = "Research"
+}`,
+	"resources/workspace_subscription": `resource "nile_workspace_subscription" "example" {
+  workspace_slug = nile_workspace.example.slug
+  level          = "paid"
+}`,
+	"resources/billing_customer": `resource "nile_billing_customer" "example" {
+  workspace_slug = nile_workspace.example.slug
+}`,
+	"resources/provisioned_database": `resource "nile_provisioned_database" "example" {
+  region = "AWS_EU_CENTRAL_1"
+}
+
+resource "nile_database" "claimed" {
+  workspace_slug = nile_workspace.example.slug
+  region         = "AWS_EU_CENTRAL_1"
+  claim_code     = nile_provisioned_database.example.claim_code
 }`,
 	"data-sources/database": `data "nile_database" "example" {
   workspace_slug = "my-workspace"

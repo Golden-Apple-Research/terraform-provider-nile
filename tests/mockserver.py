@@ -15,9 +15,16 @@ to end:
   concatenate them), and
 - retries: with MOCK_FAIL_FIRST=1 the very first request answers 503 with
   Retry-After: 0 (the provider must retry and succeed).
+
+The mock is permissive where the live API rejects API keys (live answers
+403 forbidden_operation for API keys on workspace creation and all billing
+mutations): the mock accepts any bearer token for those routes, so the smoke
+test can exercise the full lifecycle. The free-tier insights 503
+(db_config_missing) is likewise not simulated.
 """
 import json
 import os
+import re
 import sys
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse, unquote
@@ -50,7 +57,7 @@ SEEDED_INSTANCES = [
         },
         "status": "READY",
         "workspace": WORKSPACE,
-        "database": {"id": "db-seed", "name": "test-database", "status": "READY", "region": "AWS_US_WEST_2"},
+        "database": {"id": "db-seed", "name": "test_database", "status": "READY", "region": "AWS_US_WEST_2"},
         "region": "AWS_US_WEST_2",
         "created": "2025-06-01T12:00:00Z",
         "updated": "2025-06-02T12:00:00Z",
@@ -74,7 +81,7 @@ SEEDED_INSTANCES = [
 def seeded_database():
     return {
         "id": "db-seed",
-        "name": "test-database",
+        "name": "test_database",
         "status": "READY",
         "region": "AWS_US_WEST_2",
         "expandable": True,
@@ -85,15 +92,34 @@ def seeded_database():
     }
 
 
+# Refresh token accepted by POST /oauth2/token; the mock answers with the
+# same bearer TOKEN the authenticated endpoints expect.
+OAUTH_REFRESH_TOKEN = "mock-refresh-token"
+
 # Mutable server state.
 STATE = {
-    "databases": {"test-database": seeded_database()},
+    "workspaces": {WORKSPACE["slug"]: dict(WORKSPACE)},
+    "next_workspace": 2,
+    "databases": {"test_database": seeded_database()},
     "next_database": 1,
-    "computes": {"test-database": {i["instanceId"]: i for i in SEEDED_INSTANCES}},
+    "computes": {"test_database": {i["instanceId"]: i for i in SEEDED_INSTANCES}},
     "credentials": {},
     "next_credential": 1,
     "invites": {},
     "next_invite": 1,
+    "subscriptions": {
+        WORKSPACE["slug"]: {
+            "workspace": WORKSPACE["slug"],
+            "level": "paid",
+            "validFrom": "2025-01-01T00:00:00Z",
+            "validTo": "2026-01-01T00:00:00Z",
+            "subscriptionId": "sub-1",
+            "defaultPaymentMethod": "pm-1",
+        }
+    },
+    "next_subscription": 2,
+    "provisioned": {},
+    "next_provisioned": 1,
 }
 
 
@@ -123,6 +149,15 @@ class Handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             return {}
 
+    def _read_form(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        if not length:
+            return {}
+        try:
+            return {k: v[0] for k, v in parse_qs(self.rfile.read(length).decode()).items()}
+        except ValueError:
+            return {}
+
     def _segments(self):
         return [unquote(part) for part in urlparse(self.path).path.strip("/").split("/")]
 
@@ -139,9 +174,13 @@ class Handler(BaseHTTPRequestHandler):
         self._handle("DELETE")
 
     def _handle(self, method):
-        if self.headers.get("Authorization") != "Bearer " + TOKEN:
-            self._send(401, error_payload("invalid_credentials", "bad token", 401))
-            return
+        segments = self._segments()
+        # Unauthenticated endpoints (OAuth token exchange, database
+        # provisioning) skip the bearer check entirely.
+        if segments not in (["oauth2", "token"], ["databases", "provision"]):
+            if self.headers.get("Authorization") != "Bearer " + TOKEN:
+                self._send(401, error_payload("invalid_credentials", "bad token", 401))
+                return
         if os.environ.get("MOCK_FAIL_FIRST") and not Handler.failed_once:
             Handler.failed_once = True
             self._send(
@@ -151,7 +190,6 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
 
-        segments = self._segments()
         query = parse_qs(urlparse(self.path).query)
         try:
             handled = self._route(method, segments, query)
@@ -173,9 +211,84 @@ class Handler(BaseHTTPRequestHandler):
             })
             return True
 
+        # /oauth2/token (unauthenticated, form-encoded)
+        if segments == ["oauth2", "token"] and method == "POST":
+            form = self._read_form()
+            if form.get("grant_type") != "refresh_token":
+                self._send(400, error_payload("bad_request", "unsupported grant_type", 400))
+                return True
+            if form.get("refresh_token") != OAUTH_REFRESH_TOKEN:
+                self._send(401, error_payload("invalid_credentials", "bad refresh token", 401))
+                return True
+            self._send(200, {
+                "access_token": TOKEN,
+                "token_type": "bearer",
+                "expires_in": 3600,
+                "scope": "offline_access",
+            })
+            return True
+
+        # /databases/provision (unauthenticated)
+        if segments == ["databases", "provision"] and method == "POST":
+            region = self._read_body().get("region", "")
+            n = STATE["next_provisioned"]
+            claim_code = f"claim-{n}"
+            STATE["next_provisioned"] += 1
+            database_id = f"proddb-{n}"
+            database_name = f"unauth_mock_{n}"
+            api_host = f"https://{region.lower()}.api.thenile.dev/v2/databases/{database_id}"
+            db_host = f"postgres://{region.lower()}.db.thenile.dev/{database_name}"
+            password = f"password-prov-{n}"
+            STATE["provisioned"][claim_code] = {
+                "region": region,
+                "database_id": database_id,
+                "database_name": database_name,
+            }
+            # Response shape mirrors the live /databases/provision endpoint,
+            # including the env object with embedded connection credentials.
+            self._send(201, {
+                "claimCode": claim_code,
+                "region": region,
+                "databaseId": database_id,
+                "databaseName": database_name,
+                "apiHost": api_host,
+                "dbHost": db_host,
+                "credentialId": f"prov-cred-{n}",
+                "password": password,
+                "sharded": True,
+                "env": {
+                    "NILEDB_POSTGRES_URL": db_host,
+                    "POSTGRES_URL": f"postgres://u-prov-{n}:{password}@{region.lower()}.db.thenile.dev/{database_name}",
+                    "NILEDB_URL": f"postgres://u-prov-{n}:{password}@{region.lower()}.db.thenile.dev/{database_name}",
+                    "NILEDB_API_URL": api_host,
+                    "NILEDB_PASSWORD": password,
+                    "NILEDB_USER": f"u-prov-{n}",
+                },
+            })
+            return True
+
         # /workspaces
         if segments == ["workspaces"] and method == "GET":
-            self._send(200, [WORKSPACE])
+            self._send(200, list(STATE["workspaces"].values()))
+            return True
+        if segments == ["workspaces"] and method == "POST":
+            name = self._read_body().get("name", "")
+            if not name:
+                self._send(400, error_payload("bad_request", "name is required", 400))
+                return True
+            slug = name.strip().lower().replace(" ", "-")
+            if slug in STATE["workspaces"]:
+                self._send(409, error_payload("duplicate_entity", "workspace exists", 409))
+                return True
+            workspace = {
+                "id": f"ws-{STATE['next_workspace']}",
+                "name": name,
+                "slug": slug,
+                "created": "2025-08-01T00:00:00Z",
+            }
+            STATE["next_workspace"] += 1
+            STATE["workspaces"][slug] = workspace
+            self._send(201, workspace)
             return True
 
         if len(segments) >= 2 and segments[0] == "workspaces":
@@ -187,10 +300,12 @@ class Handler(BaseHTTPRequestHandler):
     def _route_workspace(self, method, workspace_slug, rest, query):
         # /workspaces/{slug}
         if not rest and method == "GET":
-            if workspace_slug != WORKSPACE["slug"]:
+            workspace = STATE["workspaces"].get(workspace_slug)
+            if workspace is None:
                 self._send(404, error_payload("entity_not_found", "no such workspace", 404))
                 return True
-            self._send(200, [WORKSPACE])
+            # The live API answers with a single object, not an array.
+            self._send(200, workspace)
             return True
 
         if not rest:
@@ -224,7 +339,7 @@ class Handler(BaseHTTPRequestHandler):
                 "end": "2025-06-02T00:00:00Z",
                 "chartData": {"points": [{"x": 1, "y": 2}], "maxCPUCount": 4},
                 "usageByDatabase": {
-                    "test-database": {
+                    "test_database": {
                         "totalVCPUHours": 12.5,
                         "start": "2025-06-01T00:00:00Z",
                         "end": "2025-06-02T00:00:00Z",
@@ -241,7 +356,7 @@ class Handler(BaseHTTPRequestHandler):
             }])
             return True
         if head == "subscription":
-            return self._route_subscription(method, tail)
+            return self._route_subscription(method, workspace_slug, tail)
         if head == "billing":
             return self._route_billing(method, tail)
         return False
@@ -253,7 +368,13 @@ class Handler(BaseHTTPRequestHandler):
         if not rest and method == "POST":
             body = self._read_body()
             name = body.get("databaseName", "")
-            if not name or name in STATE["databases"]:
+            if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", name or ""):
+                self._send(400, error_payload(
+                    "bad_request",
+                    f"Invalid id: database name did not match pattern "
+                    f"^[a-zA-Z_][a-zA-Z0-9_]*$: {name}", 400))
+                return True
+            if name in STATE["databases"]:
                 self._send(409, error_payload("duplicate_entity", "database exists", 409))
                 return True
             database = {
@@ -271,8 +392,42 @@ class Handler(BaseHTTPRequestHandler):
             STATE["databases"][name] = database
             self._send(201, database)
             return True
+        if rest == ["claim"] and method == "POST":
+            claim_code = self._read_body().get("claimCode", "")
+            provisioned = STATE["provisioned"].pop(claim_code, None)
+            if provisioned is None:
+                self._send(404, error_payload("entity_not_found", "unknown claim code", 404))
+                return True
+            # Live semantics: the claimed database keeps the name and id
+            # assigned during (unauthenticated) provisioning.
+            name = provisioned.get("database_name", f"unauth_mock_{STATE['next_database']}")
+            database = {
+                "id": provisioned.get("database_id", f"db-{STATE['next_database']}"),
+                "name": name,
+                "status": "READY",
+                "region": provisioned.get("region", "AWS_US_WEST_2"),
+                "expandable": False,
+                "created": "2025-08-01T00:00:00Z",
+                "apiHost": f"{name}.api.thenile.dev",
+                "dbHost": f"{name}.db.thenile.dev",
+                "workspace": STATE["workspaces"].get(workspace_slug, WORKSPACE),
+            }
+            STATE["next_database"] += 1
+            STATE["databases"][name] = database
+            self._send(201, database)
+            return True
 
         name = rest[0]
+
+        if len(rest) > 1 and rest[1] == "insights":
+            # The live API only accepts the database id on this path and
+            # rejects the database name with 400 "Invalid id". Route this
+            # before the name-based lookups below: ids are not dictionary keys.
+            database = next((d for d in STATE["databases"].values() if d["id"] == rest[0]), None)
+            if database is None:
+                self._send(400, error_payload("bad_request", f"Invalid id: {rest[0]}", 400))
+                return True
+            return self._route_insights(method, rest[2:], database["name"], query)
 
         if name not in STATE["databases"]:
             self._send(404, error_payload("entity_not_found", "no such database", 404))
@@ -303,8 +458,6 @@ class Handler(BaseHTTPRequestHandler):
             return self._route_compute(method, name, rest[2:], query)
         if rest[1] == "credentials":
             return self._route_credentials(method, name, rest[2:], query)
-        if rest[1] == "insights":
-            return self._route_insights(method, rest[2:], name)
         return False
 
     def _route_compute(self, method, database_name, rest, query):
@@ -312,7 +465,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if not rest and method == "GET":
             values = list(instances.values())
-            if database_name == "test-database":
+            if database_name == "test_database":
                 # Exercise pagination: first page is a wrapped object with a
                 # continuation token, the second page a bare array.
                 token = (query.get("pageToken") or [""])[0]
@@ -393,6 +546,27 @@ class Handler(BaseHTTPRequestHandler):
             credentials[credential_id] = credential
             self._send(200, credential)
             return True
+        if rest == ["rotate"] and method == "POST":
+            body = self._read_body()
+            matching = [c for c in credentials.values() if not tenant or c.get("tenant") == tenant]
+            if not matching:
+                self._send(404, error_payload("entity_not_found", "no credential to rotate", 404))
+                return True
+            old_credential = matching[0]
+            del credentials[old_credential["id"]]
+            credential_id = f"cred-{STATE['next_credential']}"
+            STATE["next_credential"] += 1
+            credential = dict(old_credential)
+            credential["id"] = credential_id
+            credential["password"] = f"password-{credential_id}"
+            credential["created"] = "2025-08-02T00:00:00Z"
+            if body.get("delayOldSecretsExpirationHours"):
+                credential["oldSecretsExpirationHours"] = body["delayOldSecretsExpirationHours"]
+            if body.get("reason"):
+                credential["rotationReason"] = body["reason"]
+            credentials[credential_id] = credential
+            self._send(200, credential)
+            return True
 
         credential_id = rest[0]
         if credential_id not in credentials:
@@ -404,10 +578,17 @@ class Handler(BaseHTTPRequestHandler):
             return True
         return False
 
-    def _route_insights(self, method, rest, database_name):
+    def _route_insights(self, method, rest, database_name, query):
         if method != "GET" or len(rest) != 1:
             return False
         kind = rest[0]
+        # The live API rejects windows that are not aligned to whole minutes.
+        for param in ("start", "end"):
+            value = (query.get(param) or [""])[0]
+            if value and not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00(?:\.0+)?Z", value):
+                self._send(400, error_payload(
+                    "bad_request", f"{param} and end must be minute-aligned", 400))
+                return True
         if kind == "uptime":
             self._send(200, {
                 "source": "probe",
@@ -480,25 +661,46 @@ class Handler(BaseHTTPRequestHandler):
             return True
         return False
 
-    def _route_subscription(self, method, rest):
-        subscription = {
-            "workspace": WORKSPACE["slug"],
-            "level": "paid",
-            "validFrom": "2025-01-01T00:00:00Z",
-            "validTo": "2026-01-01T00:00:00Z",
-            "subscriptionId": "sub-1",
-            "defaultPaymentMethod": "pm-1",
-        }
+    def _route_subscription(self, method, workspace_slug, rest):
+        subscription = STATE["subscriptions"].get(workspace_slug)
+
         if not rest and method == "GET":
+            if subscription is None:
+                self._send(404, error_payload("entity_not_found", "no active subscription", 404))
+                return True
             self._send(200, subscription)
             return True
         if rest == ["history"] and method == "GET":
-            self._send(200, [subscription])
+            self._send(200, [subscription] if subscription else [])
             return True
-        if not rest and method in ("POST", "PUT"):
+        if not rest and method == "POST":
+            if subscription is not None:
+                self._send(409, error_payload("duplicate_entity", "subscription already started", 409))
+                return True
+            level = self._read_body().get("level", "")
+            STATE["subscriptions"][workspace_slug] = {
+                "workspace": workspace_slug,
+                "level": level,
+                "validFrom": "2025-08-01T00:00:00Z",
+                "validTo": "2026-08-01T00:00:00Z",
+                "subscriptionId": f"sub-{STATE['next_subscription']}",
+                "defaultPaymentMethod": "pm-1",
+            }
+            STATE["next_subscription"] += 1
+            self._send(200, {})
+            return True
+        if not rest and method == "PUT":
+            if subscription is None:
+                self._send(404, error_payload("entity_not_found", "no active subscription", 404))
+                return True
+            subscription["level"] = self._read_body().get("level", "")
             self._send(200, {})
             return True
         if rest and method == "DELETE":
+            # DELETE /workspaces/{slug}/subscription/{id}: the id segment is
+            # the rest after the "subscription" head. The mock does not
+            # validate it, mirroring the tolerant live API.
+            STATE["subscriptions"].pop(workspace_slug, None)
             self._send(200, {})
             return True
         return False

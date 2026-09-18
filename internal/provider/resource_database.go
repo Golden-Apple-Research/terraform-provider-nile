@@ -50,6 +50,7 @@ type databaseResourceModel struct {
 	ParentID      types.String   `tfsdk:"parent_id"`
 	ParentName    types.String   `tfsdk:"parent_name"`
 	Raw           types.String   `tfsdk:"raw_json"`
+	ClaimCode     types.String   `tfsdk:"claim_code"`
 	Timeouts      timeouts.Value `tfsdk:"timeouts"`
 }
 
@@ -74,11 +75,18 @@ func (r *databaseResource) Schema(ctx context.Context, _ resource.SchemaRequest,
 				MarkdownDescription: "Slug of the Nile workspace that owns the database. Changing it forces replacement.",
 			},
 			"name": schema.StringAttribute{
-				Required: true,
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
 				},
-				MarkdownDescription: "Database name. Renaming updates the database in place via " +
+				MarkdownDescription: "Database name. Must match `^[a-zA-Z_][a-zA-Z0-9_]*$` (letters, digits, " +
+					"underscores; must not start with a digit; hyphens are rejected by the live API). " +
+					"Required unless `claim_code` is set (claiming assigns the name server-side). " +
+					"Renaming updates the database in place via " +
 					"`PUT /workspaces/{workspaceSlug}/databases/{databaseName}`.",
 			},
 			"region": schema.StringAttribute{
@@ -91,6 +99,16 @@ func (r *databaseResource) Schema(ctx context.Context, _ resource.SchemaRequest,
 				},
 				MarkdownDescription: "Region the database runs in (for example `AWS_US_WEST_2`, `AWS_EU_CENTRAL_1` or " +
 					"`AZURE_EASTUS`). Changing it forces replacement.",
+			},
+			"claim_code": schema.StringAttribute{
+				Optional:  true,
+				Sensitive: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+				MarkdownDescription: "Claim an already provisioned dedicated database (see `nile_provisioned_database`) " +
+					"instead of creating a new one via `POST /workspaces/{workspaceSlug}/databases/claim`. " +
+					"The claim code is consumed by the claim; changing it forces replacement.",
 			},
 			"id": schema.StringAttribute{
 				Computed:            true,
@@ -181,7 +199,46 @@ func (r *databaseResource) Create(ctx context.Context, req resource.CreateReques
 	workspaceSlug := plan.WorkspaceSlug.ValueString()
 	name := plan.Name.ValueString()
 
-	db, err := r.client.CreateDatabase(ctx, workspaceSlug, nileapi.CreateDatabaseRequest{
+	claimCode := plan.ClaimCode.ValueString()
+	if claimCode != "" && name != "" {
+		resp.Diagnostics.AddError(
+			"Cannot combine name and claim_code",
+			"Claiming a provisioned database assigns its name server-side; do not set `name` when `claim_code` is used.",
+		)
+		return
+	}
+
+	var db nileapi.Database
+	var err error
+	if claimCode != "" {
+		db, err = r.client.ClaimDatabase(ctx, workspaceSlug, claimCode)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error claiming database",
+				fmt.Sprintf("Could not claim a database for workspace %q with the given claim code: %s", workspaceSlug, err.Error()),
+			)
+			return
+		}
+		name = db.Name
+		applyDatabaseResource(&plan, db, workspaceSlug, name)
+		resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+		if db.ID == "" {
+			resp.Diagnostics.AddError(
+				"API returned no database identifier",
+				fmt.Sprintf("The claim response for workspace %q did not contain an id.", workspaceSlug),
+			)
+		}
+		return
+	}
+	if name == "" {
+		resp.Diagnostics.AddError(
+			"Database name required",
+			"Set `name` unless the database is claimed via `claim_code`.",
+		)
+		return
+	}
+
+	db, err = r.client.CreateDatabase(ctx, workspaceSlug, nileapi.CreateDatabaseRequest{
 		DatabaseName: name,
 		Region:       plan.Region.ValueString(),
 	})

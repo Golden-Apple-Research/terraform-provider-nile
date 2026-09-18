@@ -24,10 +24,10 @@ data "nile_database_uptime_insights" "example" {
 
 The following arguments are supported:
 
-- `database` - (Required) Name or identifier of the database. The API path names this parameter `databaseId`.
-- `end` - (Optional) RFC3339 timestamp marking the end of the metrics window (`end` query parameter).
+- `database` - (Required) Identifier (id) of the database. The API path names this parameter `databaseId`; the live API rejects database names here with `Invalid id`. Use the `id` attribute of `nile_database`.
+- `end` - (Optional) RFC3339 timestamp marking the end of the metrics window (`end` query parameter). Must be aligned to whole minutes; the live API rejects sub-minute timestamps.
 - `granularity` - (Optional) Bucket size of the returned samples (`granularity` query parameter).
-- `start` - (Optional) RFC3339 timestamp marking the start of the metrics window (`start` query parameter).
+- `start` - (Optional) RFC3339 timestamp marking the start of the metrics window (`start` query parameter). Must be aligned to whole minutes; the live API rejects sub-minute timestamps.
 - `workspace_slug` - (Required) Slug of the Nile workspace that owns the database.
 
 ## Attribute Reference

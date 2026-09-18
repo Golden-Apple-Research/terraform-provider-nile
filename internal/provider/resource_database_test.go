@@ -27,10 +27,18 @@ func TestDatabaseResourceSchema(t *testing.T) {
 			t.Errorf("missing attribute %q", name)
 		}
 	}
-	for _, name := range []string{"workspace_slug", "name", "region"} {
+	for _, name := range []string{"workspace_slug", "region"} {
 		if attr := sch.Attributes[name]; attr == nil || !attr.IsRequired() {
 			t.Errorf("%s must be required", name)
 		}
+	}
+	// name is optional (a claimed database gets its name server-side) but
+	// computed so it always shows up in state.
+	if attr := sch.Attributes["name"]; attr == nil || !attr.IsOptional() || !attr.IsComputed() {
+		t.Error("name must be optional and computed")
+	}
+	if attr := sch.Attributes["claim_code"]; attr == nil || !attr.IsOptional() || !attr.IsSensitive() {
+		t.Error("claim_code must be optional and sensitive")
 	}
 }
 
@@ -314,5 +322,68 @@ func TestApplyDatabaseResourcePreservesOmittedFields(t *testing.T) {
 	if !model.Expandable.ValueBool() || model.Created.ValueString() != "created" ||
 		model.ParentID.ValueString() != "parent-id" || model.ParentName.ValueString() != "parent" {
 		t.Fatalf("partial response cleared state: %+v", model)
+	}
+}
+
+func TestDatabaseResourceCreateFromClaimCode(t *testing.T) {
+	var method, path, body string
+	client := credentialAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		buf := make([]byte, r.ContentLength)
+		_, _ = r.Body.Read(buf)
+		body = string(buf)
+		_, _ = w.Write([]byte(`{"id":"db-77","name":"claimed_db_1","status":"READY","region":"AWS_EU_CENTRAL_1"}`))
+	})
+	r := NewDatabaseResource().(*databaseResource)
+	var cResp resource.ConfigureResponse
+	r.Configure(context.Background(), resource.ConfigureRequest{ProviderData: client}, &cResp)
+	if cResp.Diagnostics.HasError() {
+		t.Fatalf("configure diagnostics: %v", cResp.Diagnostics)
+	}
+
+	resp := resource.CreateResponse{State: crudResponseState(t, r)}
+	r.Create(context.Background(), resource.CreateRequest{
+		Plan: planWith(t, r, map[string]tftypes.Value{
+			"workspace_slug": stringAttr("ws"),
+			"region":         stringAttr("AWS_EU_CENTRAL_1"),
+			"claim_code":     stringAttr("claim-xyz"),
+		}),
+	}, &resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("create diagnostics: %v", resp.Diagnostics)
+	}
+	if method != http.MethodPost || path != "/workspaces/ws/databases/claim" || body != `{"claimCode":"claim-xyz"}` {
+		t.Errorf("request = %s %s %s", method, path, body)
+	}
+	if got := stateString(t, resp.State, "name"); got != "claimed_db_1" {
+		t.Errorf("name = %q", got)
+	}
+	if got := stateString(t, resp.State, "id"); got != "db-77" {
+		t.Errorf("id = %q", got)
+	}
+}
+
+func TestDatabaseResourceCreateRejectsNameAndClaimCode(t *testing.T) {
+	client := credentialAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("must not call the API, got %s %s", r.Method, r.URL.Path)
+	})
+	r := NewDatabaseResource().(*databaseResource)
+	var cResp resource.ConfigureResponse
+	r.Configure(context.Background(), resource.ConfigureRequest{ProviderData: client}, &cResp)
+	if cResp.Diagnostics.HasError() {
+		t.Fatalf("configure diagnostics: %v", cResp.Diagnostics)
+	}
+
+	resp := resource.CreateResponse{State: crudResponseState(t, r)}
+	r.Create(context.Background(), resource.CreateRequest{
+		Plan: planWith(t, r, map[string]tftypes.Value{
+			"workspace_slug": stringAttr("ws"),
+			"name":           stringAttr("app"),
+			"region":         stringAttr("AWS_EU_CENTRAL_1"),
+			"claim_code":     stringAttr("claim-xyz"),
+		}),
+	}, &resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected an error when name and claim_code are combined")
 	}
 }

@@ -6,6 +6,9 @@ package provider
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -137,6 +140,10 @@ func TestProviderResources(t *testing.T) {
 		"nile_database_compute_instance",
 		"nile_database_credential",
 		"nile_developer_invite",
+		"nile_workspace",
+		"nile_workspace_subscription",
+		"nile_billing_customer",
+		"nile_provisioned_database",
 	}
 
 	fns := p.Resources(context.Background())
@@ -190,12 +197,16 @@ func isolateEnv(t *testing.T, key string) {
 func providerConfigRaw(token, apiURL any) tftypes.Value {
 	return tftypes.NewValue(tftypes.Object{
 		AttributeTypes: map[string]tftypes.Type{
-			"api_token": tftypes.String,
-			"api_url":   tftypes.String,
+			"api_token":           tftypes.String,
+			"api_url":             tftypes.String,
+			"oauth_client_id":     tftypes.String,
+			"oauth_refresh_token": tftypes.String,
 		},
 	}, map[string]tftypes.Value{
-		"api_token": tftypes.NewValue(tftypes.String, token),
-		"api_url":   tftypes.NewValue(tftypes.String, apiURL),
+		"api_token":           tftypes.NewValue(tftypes.String, token),
+		"api_url":             tftypes.NewValue(tftypes.String, apiURL),
+		"oauth_client_id":     tftypes.NewValue(tftypes.String, nil),
+		"oauth_refresh_token": tftypes.NewValue(tftypes.String, nil),
 	})
 }
 
@@ -330,5 +341,69 @@ func TestProviderConfigureInvalidURL(t *testing.T) {
 	}
 	if !strings.Contains(fmt.Sprintf("%v", resp.Diagnostics), "scheme") {
 		t.Errorf("diagnostics = %v", resp.Diagnostics)
+	}
+}
+
+func TestProviderConfigureOAuthExchange(t *testing.T) {
+	isolateEnv(t, envAPIToken)
+	isolateEnv(t, envAPIURL)
+	isolateEnv(t, envOAuthClientID)
+	isolateEnv(t, envOAuthRefreshToken)
+
+	var tokenForm, authHeader string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/oauth2/token":
+			authHeader = r.Header.Get("Authorization")
+			body, _ := io.ReadAll(r.Body)
+			tokenForm = string(body)
+			_, _ = w.Write([]byte(`{"access_token":"exchanged-token","token_type":"bearer","expires_in":3600}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/developers/me":
+			if r.Header.Get("Authorization") != "Bearer exchanged-token" {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`{"errorCode":"invalid_credentials","message":"bad token","statusCode":401}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"id":"dev-1","email":"dev@example.com","kind":"HUMAN"}`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	raw := tftypes.NewValue(tftypes.Object{
+		AttributeTypes: map[string]tftypes.Type{
+			"api_token":           tftypes.String,
+			"api_url":             tftypes.String,
+			"oauth_client_id":     tftypes.String,
+			"oauth_refresh_token": tftypes.String,
+		},
+	}, map[string]tftypes.Value{
+		"api_token":           tftypes.NewValue(tftypes.String, nil),
+		"api_url":             tftypes.NewValue(tftypes.String, srv.URL),
+		"oauth_client_id":     tftypes.NewValue(tftypes.String, "cid"),
+		"oauth_refresh_token": tftypes.NewValue(tftypes.String, "rt-1"),
+	})
+
+	resp := configure(t, raw)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics: %v", resp.Diagnostics)
+	}
+	if want := "client_id=cid&grant_type=refresh_token&refresh_token=rt-1"; tokenForm != want {
+		t.Errorf("token form = %q, want %q", tokenForm, want)
+	}
+	if authHeader != "" {
+		t.Errorf("token exchange must be unauthenticated, got Authorization %q", authHeader)
+	}
+	client, ok := resp.DataSourceData.(*nileapi.Client)
+	if !ok {
+		t.Fatalf("DataSourceData = %T, want *nileapi.Client", resp.DataSourceData)
+	}
+	if client.AuthToken != "exchanged-token" {
+		t.Errorf("AuthToken = %q, want exchanged-token", client.AuthToken)
+	}
+	if _, err := client.GetDeveloper(context.Background()); err != nil {
+		t.Errorf("GetDeveloper with the exchanged token: %v", err)
 	}
 }

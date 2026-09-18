@@ -13,7 +13,7 @@ variable "nile_api_url" {
 
 variable "database_name" {
   type    = string
-  default = "app-database"
+  default = "app_database"
 }
 
 variable "instance_size" {
@@ -21,8 +21,20 @@ variable "instance_size" {
   default = "large"
 }
 
+variable "subscription_level" {
+  type    = string
+  default = "paid"
+}
+
+variable "credential_rotation" {
+  type    = string
+  default = "initial"
+}
+
 provider "nile" {
-  api_url = var.nile_api_url
+  api_url             = var.nile_api_url
+  oauth_client_id     = "mock-client"
+  oauth_refresh_token = "mock-refresh-token"
 }
 
 # --- resources ---------------------------------------------------------------
@@ -40,16 +52,40 @@ resource "nile_database_compute_instance" "app" {
   instance_size  = var.instance_size
 }
 
-resource "nile_database_credential" "app" {
-  workspace_slug = nile_database.app.workspace_slug
-  database_name  = nile_database.app.name
-  tenant_id      = "acme"
-}
-
 resource "nile_developer_invite" "qa" {
   workspace_slug = "test-workspace"
   email          = "qa@example.com"
   programmatic   = true
+}
+
+resource "nile_database_credential" "app" {
+  workspace_slug   = nile_database.app.workspace_slug
+  database_name    = nile_database.app.name
+  tenant_id        = "acme"
+  rotation_trigger = var.credential_rotation
+}
+
+resource "nile_workspace" "extra" {
+  name = "Smoke Extra"
+}
+
+resource "nile_billing_customer" "extra" {
+  workspace_slug = nile_workspace.extra.slug
+}
+
+resource "nile_workspace_subscription" "extra" {
+  workspace_slug = nile_workspace.extra.slug
+  level          = var.subscription_level
+}
+
+resource "nile_provisioned_database" "extra" {
+  region = "AWS_EU_CENTRAL_1"
+}
+
+resource "nile_database" "claimed" {
+  workspace_slug = "test-workspace"
+  region         = "AWS_EU_CENTRAL_1"
+  claim_code     = nile_provisioned_database.extra.claim_code
 }
 
 # --- data sources ------------------------------------------------------------
@@ -57,15 +93,15 @@ resource "nile_developer_invite" "qa" {
 # Existing paginated compute instance list (seeded database).
 data "nile_database_compute_instances" "test" {
   workspace_slug = "test-workspace"
-  database_name  = "test-database"
+  database_name  = "test_database"
 }
 
 data "nile_databases" "all" {
   workspace_slug = "test-workspace"
 
-  # Re-read the list after the managed database changes (for example on a
+  # Re-read the list after the managed databases change (for example on a
   # rename), so the data source never shows stale names.
-  depends_on = [nile_database.app]
+  depends_on = [nile_database.app, nile_database.claimed]
 }
 
 data "nile_database" "app" {
@@ -94,7 +130,11 @@ data "nile_workspace" "test" {
   slug = "test-workspace"
 }
 
-data "nile_workspaces" "all" {}
+data "nile_workspaces" "all" {
+  # The list is read after the managed workspace exists, mirroring the
+  # databases data source above.
+  depends_on = [nile_workspace.extra]
+}
 
 data "nile_workspace_developers" "test" {
   workspace_slug = "test-workspace"
@@ -118,17 +158,17 @@ data "nile_workspace_compute_usage" "test" {
 
 data "nile_database_uptime_insights" "test" {
   workspace_slug = nile_database.app.workspace_slug
-  database       = nile_database.app.name
+  database       = nile_database.app.id
 }
 
 data "nile_database_error_insights" "test" {
   workspace_slug = nile_database.app.workspace_slug
-  database       = nile_database.app.name
+  database       = nile_database.app.id
 }
 
 data "nile_database_query_performance_insights" "test" {
   workspace_slug = nile_database.app.workspace_slug
-  database       = nile_database.app.name
+  database       = nile_database.app.id
 }
 
 data "nile_workspace_billing_readiness" "test" {
@@ -301,4 +341,41 @@ output "billing_compute" {
 
 output "developer_email" {
   value = data.nile_developer.me.email
+}
+
+output "workspace_extra_slug" {
+  value = nile_workspace.extra.slug
+}
+
+output "workspace_extra_id" {
+  value = nile_workspace.extra.id
+}
+
+output "billing_customer_id" {
+  value = nile_billing_customer.extra.stripe_customer_id
+}
+
+output "subscription_resource_level" {
+  value = nile_workspace_subscription.extra.level
+}
+
+output "subscription_resource_id" {
+  value = nile_workspace_subscription.extra.subscription_id
+}
+
+output "provisioned_database_name" {
+  value = nile_provisioned_database.extra.database_name
+}
+
+output "provisioned_claim_code" {
+  value     = nile_provisioned_database.extra.claim_code
+  sensitive = true
+}
+
+output "claimed_database_name" {
+  value = nile_database.claimed.name
+}
+
+output "claimed_database_id" {
+  value = nile_database.claimed.id
 }

@@ -5,6 +5,7 @@ package provider
 
 import (
 	"context"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -62,6 +63,11 @@ func rawObject(objType tftypes.Object, overrides map[string]tftypes.Value) tftyp
 
 // stringAttr wraps a string for rawObject overrides.
 func stringAttr(s string) tftypes.Value { return tftypes.NewValue(tftypes.String, s) }
+
+// int64Attr wraps an integer for rawObject overrides of number attributes.
+func int64Attr(i int64) tftypes.Value {
+	return tftypes.NewValue(tftypes.Number, new(big.Float).SetInt64(i))
+}
 
 // timeoutsAttr builds a raw `timeouts` attribute value. The map keys must
 // match the operations the resource's timeouts schema enables (for example

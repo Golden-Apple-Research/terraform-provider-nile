@@ -19,7 +19,7 @@ notes below are documented in detail under [`docs/index.md`](docs/index.md).
 
 ## Managed resources
 
-The provider implements four managed resources, one for each Nile object with
+The provider implements eight managed resources, one for each Nile object with
 a declarative lifecycle.
 
 The `nile_database` resource covers the complete lifecycle of a database —
@@ -45,15 +45,47 @@ Updates include resizing an instance, which the API performs asynchronously
 ([create](https://www.thenile.dev/docs/api-reference/databases/create-a-database-credential),
 [list](https://www.thenile.dev/docs/api-reference/databases/lists-credentials-for-a-database),
 [delete](https://www.thenile.dev/docs/api-reference/databases/delete-a-database-credential)).
-Because Nile has no update endpoint for credentials, changes always replace
-the credential; the returned password is shown exactly once and is handled as
-a sensitive value.
+Because Nile has no update endpoint for credentials, identity changes always
+replace the credential; the returned password is shown exactly once and is
+handled as a sensitive value. Changing `rotation_trigger` rotates the
+credential in place via the [rotate
+endpoint](https://www.thenile.dev/docs/api-reference/databases/rotate-a-database-credential),
+promoting the new one-time password into state.
 
 Finally, `nile_developer_invite` manages invitations for developers to join a
 workspace, via `POST/GET/DELETE /workspaces/{workspaceSlug}/invites/{inviteId}`
 ([invite](https://www.thenile.dev/docs/api-reference/developers/invite-a-developer-to-a-workspace),
 [list](https://www.thenile.dev/docs/api-reference/developers/list-developer-invites),
 [delete](https://www.thenile.dev/docs/api-reference/developers/deletes-a-previously-issued-invite)).
+
+`nile_workspace` creates workspaces via `POST /workspaces`
+([create](https://www.thenile.dev/docs/api-reference/workspaces/create-a-workspace)).
+The API exposes no workspace deletion or rename: destroy removes the resource
+from state only, and changing `name` starts a new workspace. Creation is
+rejected with 403 for API keys — the resource needs OAuth credentials or a
+session token.
+
+`nile_workspace_subscription` manages the subscription of a workspace via
+`POST/PUT/DELETE /workspaces/{workspaceSlug}/subscription`
+([start](https://www.thenile.dev/docs/api-reference/workspaces/start-a-subscription-row),
+[change](https://www.thenile.dev/docs/api-reference/workspaces/change-level-effective-now-or-at-timestamp),
+[close](https://www.thenile.dev/docs/api-reference/workspaces/close-a-subscription-row-at-given-time-now-if-omitted)).
+Changing `level` updates the subscription in place; destroy closes it.
+Billing endpoints need a session (developer) token — API keys get 403.
+
+`nile_billing_customer` ensures a Stripe customer is linked to a workspace via
+`PUT /workspaces/{workspaceSlug}/billing/customer`
+([ensure](https://www.thenile.dev/docs/api-reference/workspaces/ensure-workspace-billing-customer)).
+The idempotent call runs on create, refresh and update; the API cannot unlink
+a customer, so destroy is state-only.
+
+`nile_provisioned_database` provisions a dedicated database without
+authentication via `POST /databases/provision`
+([provision](https://www.thenile.dev/docs/api-reference/databases/provision-a-database-without-authentication))
+and exposes the one-time claim code. Feed the code into `nile_database`'s
+`claim_code` attribute to [claim the database for a
+workspace](https://www.thenile.dev/docs/api-reference/databases/claim-a-database-provisioned-without-auth).
+Dedicated compute requires a paid plan.
 
 ## Data sources
 
@@ -110,29 +142,13 @@ behind the API token.
 
 A few endpoints of the management API are implemented in the Go client
 (`internal/nileapi`) but deliberately have no Terraform object, because they
-are unauthenticated provisioning flows, billing mutations, or imperative
-operations without a declarative lifecycle.
+are imperative operations without a declarative lifecycle.
 
-`ProvisionDatabase` [provisions a database without
-authentication](https://www.thenile.dev/docs/api-reference/databases/provision-a-database-without-authentication)
-and `ClaimDatabase` later [claims that database for a
-workspace](https://www.thenile.dev/docs/api-reference/databases/claim-a-database-provisioned-without-auth) —
-a two-step flow that Terraform's authentication model cannot express.
-`RotateCredential` [rotates](https://www.thenile.dev/docs/api-reference/databases/rotate-a-database-credential)
-an existing credential in place; since rotation is imperative rather than
-declarative, it also stays out of the provider. Workspace administration is
-available through `CreateWorkspace` ([create a
-workspace](https://www.thenile.dev/docs/api-reference/workspaces/create-a-workspace))
-and `RemoveWorkspaceDeveloper` ([remove a
-developer](https://www.thenile.dev/docs/api-reference/workspaces/remove-a-developer-from-a-workspace)).
-Billing mutations are covered by `EnsureBillingCustomer` ([ensure the billing
-customer](https://www.thenile.dev/docs/api-reference/workspaces/ensure-workspace-billing-customer))
-as well as `StartSubscription`, `ChangeSubscription` and `CloseSubscription`
-for [starting](https://www.thenile.dev/docs/api-reference/workspaces/start-a-subscription-row),
-[changing](https://www.thenile.dev/docs/api-reference/workspaces/change-level-effective-now-or-at-timestamp)
-and [closing](https://www.thenile.dev/docs/api-reference/workspaces/close-a-subscription-row-at-given-time-now-if-omitted)
-a subscription. Finally, `ExchangeToken` performs the [OAuth2 token
-exchange](https://www.thenile.dev/docs/api-reference/post-oauth2token).
+Workspace administration beyond creation is available through
+`RemoveWorkspaceDeveloper` ([remove a
+developer](https://www.thenile.dev/docs/api-reference/workspaces/remove-a-developer-from-a-workspace))
+— there is no API to *add* a developer to a workspace directly, developers
+join through invites, which the `nile_developer_invite` resource manages.
 
 ## Example
 
@@ -144,6 +160,12 @@ outputs:
 provider "nile" {
   # Bearer token for the Nile API. Can also be set via NILE_API_TOKEN.
   api_token = var.nile_api_token
+
+  # Instead of a static token, the provider can exchange an OAuth refresh
+  # token for an access token (POST /oauth2/token). Can also be set via
+  # NILE_OAUTH_CLIENT_ID / NILE_OAUTH_REFRESH_TOKEN; api_token wins.
+  # oauth_client_id     = "my-client"
+  # oauth_refresh_token = var.nile_oauth_refresh_token
 
   # Optional. Defaults to https://global.thenile.dev
   # HTTPS is required; plain HTTP is allowed only for loopback test endpoints.

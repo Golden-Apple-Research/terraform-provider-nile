@@ -24,7 +24,7 @@ variable "workspace_slug" {
 
 resource "nile_database" "app" {
   workspace_slug = var.workspace_slug
-  name           = "app-database"
+  name           = "app_database"
   region         = "AWS_US_WEST_2"
 }
 

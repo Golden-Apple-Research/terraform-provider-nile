@@ -329,12 +329,16 @@ func TestWorkspaceEndpoints(t *testing.T) {
 		t.Errorf("path=%s workspaces=%+v", cap.path, workspaces)
 	}
 
-	ws, err := c.GetWorkspace(t.Context(), "acme")
+	wsrv, wcap := captureServer(t, 200, `{"id":"ws-1","name":"Acme","slug":"acme","created":"2025-01-01T00:00:00Z"}`)
+	defer wsrv.Close()
+	c2 := testClient(t, wsrv)
+
+	ws, err := c2.GetWorkspace(t.Context(), "acme")
 	if err != nil {
 		t.Fatalf("GetWorkspace: %v", err)
 	}
-	if cap.path != "/workspaces/acme" || ws.ID != "ws-1" {
-		t.Errorf("path=%s workspace=%+v", cap.path, ws)
+	if wcap.path != "/workspaces/acme" || ws.ID != "ws-1" {
+		t.Errorf("path=%s workspace=%+v", wcap.path, ws)
 	}
 }
 
@@ -345,6 +349,21 @@ func TestGetWorkspaceEmptyListIsNotFound(t *testing.T) {
 	_, err := c.GetWorkspace(t.Context(), "missing")
 	if !IsNotFound(err) {
 		t.Fatalf("expected not-found error, got %v", err)
+	}
+}
+
+// Regression test: the live API answers GET /workspaces/{slug} with a single
+// object, while older mock deployments returned an array. Both must parse.
+func TestGetWorkspaceAcceptsLegacyArray(t *testing.T) {
+	srv, _ := captureServer(t, 200, `[{"id":"ws-9","name":"Legacy","slug":"legacy"}]`)
+	c := testClient(t, srv)
+
+	ws, err := c.GetWorkspace(t.Context(), "legacy")
+	if err != nil {
+		t.Fatalf("GetWorkspace: %v", err)
+	}
+	if ws.ID != "ws-9" || ws.Slug != "legacy" {
+		t.Fatalf("workspace=%+v", ws)
 	}
 }
 
@@ -414,6 +433,16 @@ func TestDeveloperEndpoints(t *testing.T) {
 	}
 	if len(invites) != 1 || invites[0].ID != "inv-1" {
 		t.Errorf("invites = %+v", invites)
+	}
+
+	srv3, cap3 := captureServer(t, 200, `[{"id":"dev-1","email":"a@example.com","kind":"HUMAN"},{"id":"dev-2","email":"b@example.com","kind":"API"}]`)
+	c3 := testClient(t, srv3)
+	developers, err := c3.ListWorkspaceDevelopers(t.Context(), "acme")
+	if err != nil {
+		t.Fatalf("ListWorkspaceDevelopers: %v", err)
+	}
+	if cap3.method != http.MethodGet || cap3.path != "/workspaces/acme/developers" || len(developers) != 2 || developers[1].Kind != "API" {
+		t.Errorf("request = %s %s developers = %+v", cap3.method, cap3.path, developers)
 	}
 }
 
@@ -565,9 +594,17 @@ func TestBillingEndpoints(t *testing.T) {
 	}
 }
 
-func TestSubscriptionMutations(t *testing.T) {
-	srv, cap := captureServer(t, 200, `{}`)
+func TestSubscriptionEndpoints(t *testing.T) {
+	srv, cap := captureServer(t, 200, `{"workspace":"acme","level":"paid","validFrom":"2025-06-01T00:00:00Z","subscriptionId":"sub_9"}`)
 	c := testClient(t, srv)
+
+	sub, err := c.GetCurrentSubscription(t.Context(), "acme")
+	if err != nil {
+		t.Fatalf("GetCurrentSubscription: %v", err)
+	}
+	if cap.method != http.MethodGet || cap.path != "/workspaces/acme/subscription" || sub.Level != "paid" || sub.SubscriptionID != "sub_9" {
+		t.Errorf("request = %s %s subscription = %+v", cap.method, cap.path, sub)
+	}
 
 	if err := c.StartSubscription(t.Context(), "acme", "paid"); err != nil {
 		t.Fatalf("StartSubscription: %v", err)

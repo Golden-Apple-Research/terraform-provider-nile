@@ -41,5 +41,5 @@ In addition to the arguments above, the following attributes are exported:
 ## Notes
 
 This data source only inspects the workspace's billing state. It never creates
-a billing customer; use the `EnsureBillingCustomer` client method for that.
+a billing customer; use the `nile_billing_customer` resource for that.
 
