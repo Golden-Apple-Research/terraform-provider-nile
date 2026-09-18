@@ -1,16 +1,21 @@
 // SPDX-FileCopyrightText: 2026 Golden Apple Research
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package nileapi is a minimal client for the Nile control plane REST API.
+// Package nileapi is a client for the Nile control plane REST API
+// (https://www.thenile.dev/docs/api-reference).
 package nileapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -20,6 +25,24 @@ import (
 
 const (
 	DefaultBaseURL = "https://global.thenile.dev"
+
+	// Retry policy for transient failures (rate limiting, 5xx, network
+	// errors). Retries only happen for requests that are safe to replay; see
+	// doWithRetries.
+	defaultMaxRetries = 3
+	retryBaseDelay    = 200 * time.Millisecond
+	retryMaxDelay     = 2 * time.Second
+	retryAfterCap     = 30 * time.Second
+
+	// DefaultPollInterval is the delay between readiness polls for
+	// asynchronous operations.
+	DefaultPollInterval = 5 * time.Second
+	// DefaultWaitTimeout bounds how long the provider waits for an
+	// asynchronous operation when the caller's context has no deadline.
+	DefaultWaitTimeout = 20 * time.Minute
+
+	// maxResponseBytes caps how much of a response body is buffered.
+	maxResponseBytes = 10 << 20 // 10 MiB
 )
 
 // Client talks to the Nile REST API using bearer-token authentication.
@@ -29,7 +52,20 @@ type Client struct {
 	// UserAgent, when set, is sent as the User-Agent header on requests so
 	// the API can identify the provider.
 	UserAgent string
-	HTTP      *http.Client
+	// MaxRetries is how often a transient failure (HTTP 408/429/5xx or a
+	// network error) is retried with exponential backoff. It defaults to 3;
+	// 0 disables retries.
+	MaxRetries int
+	HTTP       *http.Client
+	// PollInterval is the delay between polls while waiting for an
+	// asynchronous operation. It defaults to DefaultPollInterval.
+	PollInterval time.Duration
+	// WaitTimeout bounds the total wait for an asynchronous operation when
+	// the caller's context has no deadline. It defaults to DefaultWaitTimeout.
+	WaitTimeout time.Duration
+
+	// retrySleep is swappable so tests can make backoff waits instant.
+	retrySleep func(ctx context.Context, d time.Duration) error
 }
 
 // NewClient builds a client. An empty baseURL falls back to DefaultBaseURL.
@@ -51,62 +87,139 @@ func NewClient(baseURL, authToken string) (*Client, error) {
 		return nil, fmt.Errorf("invalid base URL %q: it must include an http:// or https:// scheme", baseURL)
 	}
 	return &Client{
-		BaseURL:   u,
-		AuthToken: authToken,
-		HTTP:      &http.Client{Timeout: 30 * time.Second},
+		BaseURL:      u,
+		AuthToken:    authToken,
+		MaxRetries:   defaultMaxRetries,
+		HTTP:         &http.Client{Timeout: 30 * time.Second},
+		PollInterval: DefaultPollInterval,
+		WaitTimeout:  DefaultWaitTimeout,
 	}, nil
 }
 
-// ComputeInstance is one dedicated compute instance attached to a database.
-// The API is evolving, so the full server payload is preserved in Raw while
-// the most useful fields are promoted to typed values (best effort).
-//
-// The promoted fields map to the API response as follows:
-//
-//	ID        <- instanceId
-//	Name      <- instanceName
-//	Status    <- status
-//	Size      <- instanceType.computeSize
-//	Region    <- region
-//	CreatedAt <- created
-//
-// Attributes the API adds or renames later remain accessible via Raw.
-type ComputeInstance struct {
-	ID        string
-	Name      string
-	Status    string
-	Size      string
-	Region    string
-	CreatedAt string
-	Raw       json.RawMessage
+// APIError is a structured error returned by the Nile API. It implements
+// error, so callers can use errors.As or the IsNotFound/IsConflict helpers.
+type APIError struct {
+	StatusCode int    `json:"statusCode"`
+	ErrorCode  string `json:"errorCode"`
+	Message    string `json:"message"`
 }
 
-// ListComputeInstances calls
-// GET /workspaces/{workspaceSlug}/databases/{databaseName}/compute
-// start/end are optional RFC3339 timestamps restricting the result to
-// instances active in that time window.
-func (c *Client) ListComputeInstances(ctx context.Context, workspaceSlug, databaseName, start, end string) ([]ComputeInstance, error) {
-	// Escape the path segments individually so that characters like "/" in a
-	// slug or database name cannot change the request path. url.Parse keeps the
-	// escaped form in RawPath, which ResolveReference preserves.
-	rel, err := url.Parse(fmt.Sprintf("/workspaces/%s/databases/%s/compute",
-		url.PathEscape(workspaceSlug), url.PathEscape(databaseName)))
-	if err != nil {
-		return nil, fmt.Errorf("building request path: %w", err)
+func (e *APIError) Error() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Nile API error (HTTP %d", e.StatusCode)
+	if e.ErrorCode != "" {
+		b.WriteString(" " + e.ErrorCode)
 	}
-	q := rel.Query()
-	if start != "" {
-		q.Set("start", start)
+	b.WriteString(")")
+	if e.Message != "" {
+		b.WriteString(": " + e.Message)
 	}
-	if end != "" {
-		q.Set("end", end)
-	}
-	rel.RawQuery = q.Encode()
+	return b.String()
+}
 
-	endpoint := c.BaseURL.ResolveReference(rel)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+// IsNotFound reports whether err is an API error with HTTP status 404.
+func IsNotFound(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound
+}
+
+// IsConflict reports whether err is an API error with HTTP status 409.
+func IsConflict(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusConflict
+}
+
+// IsForbidden reports whether err is an API error with HTTP status 403.
+func IsForbidden(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusForbidden
+}
+
+// ErrorCode returns the machine-readable API error code, or "" if err did not
+// originate from a structured API error.
+func ErrorCode(err error) string {
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.ErrorCode
+	}
+	return ""
+}
+
+// endpoint builds an absolute URL from path segments, escaping every segment
+// individually so that characters like "/" inside a workspace slug or database
+// name cannot change the request path.
+func (c *Client) endpoint(segments ...string) *url.URL {
+	escaped := make([]string, len(segments))
+	for i, s := range segments {
+		escaped[i] = url.PathEscape(s)
+	}
+	// PathEscape never emits characters that make url.Parse fail, so the
+	// error branch is unreachable; returning the base URL keeps the signature
+	// free of an error that callers cannot handle meaningfully.
+	rel, err := url.Parse("/" + strings.Join(escaped, "/"))
 	if err != nil {
-		return nil, fmt.Errorf("building request: %w", err)
+		return c.BaseURL
+	}
+	return c.BaseURL.ResolveReference(rel)
+}
+
+// withQuery adds non-empty key/value pairs to a URL's query string. Pairs are
+// passed as alternating key and value arguments; a trailing key without a
+// value is ignored.
+func withQuery(u *url.URL, kv ...string) *url.URL {
+	if len(kv) == 0 {
+		return u
+	}
+	q := u.Query()
+	for i := 0; i+1 < len(kv); i += 2 {
+		if kv[i] != "" && kv[i+1] != "" {
+			q.Set(kv[i], kv[i+1])
+		}
+	}
+	u.RawQuery = q.Encode()
+	return u
+}
+
+// withBoolQuery adds a boolean query parameter if v is non-nil.
+func withBoolQuery(u *url.URL, key string, v *bool) *url.URL {
+	if v == nil {
+		return u
+	}
+	q := u.Query()
+	q.Set(key, strconv.FormatBool(*v))
+	u.RawQuery = q.Encode()
+	return u
+}
+
+// request performs an authenticated HTTP request and, on a 2xx status,
+// decodes the JSON response into out (unless out is nil). A non-2xx status is
+// turned into an *APIError when the body carries the documented error shape.
+//
+// body may be nil, a url.Values (sent form-encoded, used by /oauth2/token), or
+// any value that is marshalled to JSON.
+func (c *Client) request(ctx context.Context, method string, u *url.URL, body, out any) error {
+	var reader io.Reader
+	contentType := ""
+	switch b := body.(type) {
+	case nil:
+	case url.Values:
+		reader = strings.NewReader(b.Encode())
+		contentType = "application/x-www-form-urlencoded"
+	default:
+		buf, err := json.Marshal(b)
+		if err != nil {
+			return fmt.Errorf("encoding request body: %w", err)
+		}
+		reader = bytes.NewReader(buf)
+		contentType = "application/json"
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), reader)
+	if err != nil {
+		return fmt.Errorf("building request: %w", err)
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.AuthToken)
 	req.Header.Set("Accept", "application/json")
@@ -114,116 +227,338 @@ func (c *Client) ListComputeInstances(ctx context.Context, workspaceSlug, databa
 		req.Header.Set("User-Agent", c.UserAgent)
 	}
 
-	resp, err := c.HTTP.Do(req)
+	resp, err := c.doWithRetries(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("calling %s: %w", endpoint.String(), err)
+		return err
 	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10 MiB guard
-	if err != nil {
-		return nil, fmt.Errorf("reading response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GET %s returned %s: %s",
-			endpoint.String(), resp.Status, truncate(body, 512))
+	payload, readErr := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	resp.Body.Close()
+	if readErr != nil {
+		return fmt.Errorf("reading response body: %w", readErr)
 	}
 
-	// The API may return a bare array or an object wrapping the array.
-	instances, err := decodeInstances(ctx, body)
-	if err != nil {
-		return nil, fmt.Errorf("decoding response from %s: %w", endpoint.String(), err)
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return decodeAPIError(resp.StatusCode, payload)
 	}
-	return instances, nil
+	if out == nil || len(bytes.TrimSpace(payload)) == 0 {
+		return nil
+	}
+	if raw, ok := out.(*json.RawMessage); ok {
+		*raw = append(json.RawMessage(nil), payload...)
+		return nil
+	}
+	if err := json.Unmarshal(payload, out); err != nil {
+		return fmt.Errorf("decoding response from %s: %w", u, err)
+	}
+	return nil
 }
 
-// wrapperKeys are the object keys that may contain the instance array in
-// responses that wrap the list instead of returning a bare array.
-var wrapperKeys = []string{"instances", "compute", "items", "data", "results"}
+// get performs a GET request.
+func (c *Client) get(ctx context.Context, u *url.URL, out any) error {
+	return c.request(ctx, http.MethodGet, u, nil, out)
+}
 
-func decodeInstances(ctx context.Context, body []byte) ([]ComputeInstance, error) {
-	// The documented response is a bare JSON array. A bare JSON null is
-	// rejected instead of being treated as an empty list: silently accepting
-	// it would hide API changes from the user.
-	var raw []json.RawMessage
-	if err := json.Unmarshal(body, &raw); err == nil {
-		if raw == nil {
-			return nil, fmt.Errorf("unexpected JSON shape: null")
-		}
-		return mapInstances(ctx, raw), nil
-	}
+// post performs a POST request.
+func (c *Client) post(ctx context.Context, u *url.URL, body, out any) error {
+	return c.request(ctx, http.MethodPost, u, body, out)
+}
 
-	// Tolerate a wrapper object, but only if it actually contains an array:
-	// silently treating an unknown object as a single instance would hide API
-	// changes from the user.
-	var wrapper map[string]json.RawMessage
-	if err := json.Unmarshal(body, &wrapper); err != nil {
-		return nil, fmt.Errorf("unexpected JSON shape: %v", err)
+// put performs a PUT request.
+func (c *Client) put(ctx context.Context, u *url.URL, body, out any) error {
+	return c.request(ctx, http.MethodPut, u, body, out)
+}
+
+// delete performs a DELETE request.
+func (c *Client) delete(ctx context.Context, u *url.URL, out any) error {
+	return c.request(ctx, http.MethodDelete, u, nil, out)
+}
+
+// decodeAPIError turns an error response into an *APIError when the payload
+// carries the documented {errorCode, message, statusCode} shape, and into a
+// plain error otherwise. The HTTP status wins over a contradicting statusCode
+// in the body.
+func decodeAPIError(status int, payload []byte) error {
+	var apiErr APIError
+	if err := json.Unmarshal(payload, &apiErr); err == nil && (apiErr.ErrorCode != "" || apiErr.Message != "") {
+		apiErr.StatusCode = status
+		return &apiErr
 	}
-	for _, key := range wrapperKeys {
-		if inner, ok := wrapper[key]; ok {
-			if err := json.Unmarshal(inner, &raw); err != nil {
-				return nil, fmt.Errorf("wrapper key %q does not contain an array: %v", key, err)
+	return fmt.Errorf("Nile API returned HTTP %d: %s", status, truncate(payload, 512))
+}
+
+// doWithRetries executes req, retrying transient failures (rate limiting,
+// 5xx, network errors) with exponential backoff and jitter. A Retry-After
+// header takes precedence over the computed backoff. Context cancellation is
+// never retried.
+//
+// Only replay-safe requests are retried after 5xx/network errors: GET, HEAD,
+// PUT, DELETE and OPTIONS. POST is retried on 429 only, because the server
+// rejected the request before processing it — a network failure or 5xx on a
+// POST is ambiguous and replaying it could create a duplicate resource.
+//
+// The returned response body is open and owned by the caller; bodies of
+// responses that are retried away are drained and closed here.
+func (c *Client) doWithRetries(ctx context.Context, req *http.Request) (*http.Response, error) {
+	attempts := c.MaxRetries + 1
+	if attempts < 1 {
+		attempts = 1
+	}
+	replayable := idempotentMethod(req.Method)
+	for attempt := 0; ; attempt++ {
+		if attempt > 0 && req.GetBody != nil {
+			// Rewind the body so a retried request sends its payload again.
+			body, err := req.GetBody()
+			if err != nil {
+				return nil, fmt.Errorf("rewinding request body: %w", err)
 			}
-			if raw == nil {
-				return nil, fmt.Errorf("wrapper key %q is null: expected an array", key)
+			req.Body = body
+		}
+		resp, err := c.HTTP.Do(req)
+		if err != nil {
+			// Retrying after the caller gave up would be pointless (and
+			// http.Client already wraps the ctx error).
+			if ctx.Err() != nil || attempt == attempts-1 || !replayable {
+				return nil, fmt.Errorf("calling %s: %w", req.URL, err)
 			}
-			return mapInstances(ctx, raw), nil
+			if waitErr := c.sleepBackoff(ctx, attempt, nil); waitErr != nil {
+				return nil, waitErr
+			}
+			continue
+		}
+		if !retryableForMethod(req.Method, resp.StatusCode) || attempt == attempts-1 {
+			return resp, nil
+		}
+		tflog.Debug(ctx, "transient failure, retrying", map[string]any{
+			"attempt": attempt + 1,
+			"status":  resp.Status,
+		})
+		// Drain so the connection can be reused for the retry.
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+		resp.Body.Close()
+		if waitErr := c.sleepBackoff(ctx, attempt, resp); waitErr != nil {
+			return nil, waitErr
 		}
 	}
-	return nil, fmt.Errorf("unexpected JSON shape: expected an array or an object with one of the keys %s",
-		strings.Join(wrapperKeys, ", "))
 }
 
-// apiInstance mirrors the documented API fields promoted by the provider.
-// Fields the API adds later stay available via ComputeInstance.Raw.
-type apiInstance struct {
-	InstanceID   *string `json:"instanceId"`
-	InstanceName *string `json:"instanceName"`
-	Status       *string `json:"status"`
-	Region       *string `json:"region"`
-	Created      *string `json:"created"`
-	InstanceType *struct {
-		ComputeSize *string `json:"computeSize"`
-	} `json:"instanceType"`
-}
-
-func mapInstances(ctx context.Context, raw []json.RawMessage) []ComputeInstance {
-	out := make([]ComputeInstance, 0, len(raw))
-	for _, r := range raw {
-		ci := ComputeInstance{Raw: append(json.RawMessage(nil), r...)}
-		// Best-effort promotion of the documented fields; a type mismatch in
-		// one field must not discard the others. The payload stays available
-		// via Raw, and the mismatch is surfaced as a log warning instead of
-		// being silently ignored.
-		var ai apiInstance
-		if err := json.Unmarshal(r, &ai); err != nil {
-			tflog.Warn(ctx, "could not promote instance fields; only raw_json will be populated", map[string]any{
-				"error": err.Error(),
-				"raw":   truncate(r, 256),
-			})
-		}
-		ci.ID = derefString(ai.InstanceID)
-		ci.Name = derefString(ai.InstanceName)
-		ci.Status = derefString(ai.Status)
-		ci.Region = derefString(ai.Region)
-		ci.CreatedAt = derefString(ai.Created)
-		if ai.InstanceType != nil {
-			ci.Size = derefString(ai.InstanceType.ComputeSize)
-		}
-		out = append(out, ci)
+// idempotentMethod reports whether a request with the given method is safe to
+// replay after a transient failure.
+func idempotentMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodPut,
+		http.MethodDelete, http.MethodOptions:
+		return true
 	}
-	return out
+	return false
 }
 
-func derefString(s *string) string {
-	if s == nil {
-		return ""
+// retryableForMethod reports whether a response with the given status may be
+// retried for the request's method. 429 means the request was rejected before
+// being processed, so it is retryable for every method.
+func retryableForMethod(method string, code int) bool {
+	if code == http.StatusTooManyRequests {
+		return true
 	}
-	return *s
+	return idempotentMethod(method) && retryableStatus(code)
 }
 
+// sleepBackoff waits before the next attempt. Network errors pass a nil
+// response and fall back to pure exponential backoff.
+func (c *Client) sleepBackoff(ctx context.Context, attempt int, resp *http.Response) error {
+	d := backoffDelay(attempt, resp)
+	sleep := c.retrySleep
+	if sleep == nil {
+		sleep = sleepWithContext
+	}
+	return sleep(ctx, d)
+}
+
+// backoffDelay returns the wait before the given attempt. A parseable
+// Retry-After header (seconds) wins verbatim — it is a server-mandated
+// minimum, so no jitter is applied that could shorten it. Otherwise the
+// delay grows exponentially from retryBaseDelay with equal jitter
+// (half fixed, half random) to avoid synchronized retry storms.
+func backoffDelay(attempt int, resp *http.Response) time.Duration {
+	if resp != nil {
+		if d, ok := retryAfterDuration(resp.Header.Get("Retry-After")); ok {
+			return d
+		}
+	}
+	d := retryBaseDelay << attempt // may overflow for very large attempt counts
+	if d <= 0 || d > retryMaxDelay {
+		d = retryMaxDelay
+	}
+	half := d / 2
+	return half + time.Duration(rand.Float64()*float64(half))
+}
+
+// retryAfterDuration parses a Retry-After header in delay-seconds form and
+// caps it at retryAfterCap so a misbehaving server cannot stall a plan.
+func retryAfterDuration(v string) (time.Duration, bool) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0, false
+	}
+	secs, err := strconv.Atoi(v)
+	if err != nil || secs < 0 {
+		return 0, false
+	}
+	if secs > int(retryAfterCap/time.Second) {
+		return retryAfterCap, true
+	}
+	return time.Duration(secs) * time.Second, true
+}
+
+func retryableStatus(code int) bool {
+	switch code {
+	case http.StatusRequestTimeout, http.StatusTooManyRequests,
+		http.StatusInternalServerError, http.StatusBadGateway,
+		http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	}
+	return false
+}
+
+// sleepWithContext waits for d (already jittered) and aborts early on context
+// cancellation.
+func sleepWithContext(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return ctx.Err()
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+// pollInterval returns the configured poll interval or the default.
+func (c *Client) pollInterval() time.Duration {
+	if c.PollInterval > 0 {
+		return c.PollInterval
+	}
+	return DefaultPollInterval
+}
+
+// waitContext bounds ctx with WaitTimeout unless the caller already supplied a
+// deadline.
+func (c *Client) waitContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if _, ok := ctx.Deadline(); ok {
+		return context.WithCancel(ctx)
+	}
+	timeout := c.WaitTimeout
+	if timeout <= 0 {
+		timeout = DefaultWaitTimeout
+	}
+	return context.WithTimeout(ctx, timeout)
+}
+
+// WaitForDatabaseReady polls GetDatabase until the database reaches READY
+// (or the API reports no status). It fails when the wait exceeds the caller's
+// deadline or WaitTimeout.
+func (c *Client) WaitForDatabaseReady(ctx context.Context, workspaceSlug, databaseName string) (Database, error) {
+	ctx, cancel := c.waitContext(ctx)
+	defer cancel()
+	interval := c.pollInterval()
+	for {
+		db, err := c.GetDatabase(ctx, workspaceSlug, databaseName)
+		switch {
+		case err == nil && databaseReady(db.Status):
+			return db, nil
+		case err != nil && ctx.Err() != nil:
+			return Database{}, fmt.Errorf("waiting for database %q in workspace %q: %w", databaseName, workspaceSlug, ctx.Err())
+		case err != nil && !IsNotFound(err):
+			return Database{}, err
+		}
+		tflog.Debug(ctx, "waiting for database to become ready", map[string]any{
+			"workspace": workspaceSlug,
+			"database":  databaseName,
+			"status":    db.Status,
+		})
+		if err := sleepWithContext(ctx, interval); err != nil {
+			return Database{}, fmt.Errorf("waiting for database %q in workspace %q: %w", databaseName, workspaceSlug, err)
+		}
+	}
+}
+
+// databaseReady reports whether a database status means the database can be
+// used. An omitted status is not considered ready: it may be a partial or
+// asynchronous response and must be followed by another poll.
+func databaseReady(status string) bool {
+	return status == "READY"
+}
+
+// WaitForComputeInstanceReady polls DescribeComputeInstance until the instance
+// reaches READY. FAILED and TERMINATED are terminal errors.
+func (c *Client) WaitForComputeInstanceReady(ctx context.Context, workspaceSlug, databaseName, instanceID string) (ComputeInstance, error) {
+	ctx, cancel := c.waitContext(ctx)
+	defer cancel()
+	interval := c.pollInterval()
+	for {
+		instance, err := c.DescribeComputeInstance(ctx, workspaceSlug, databaseName, instanceID)
+		switch {
+		case err == nil:
+			switch instance.Status {
+			case "", "READY":
+				return instance, nil
+			case "FAILED", "TERMINATED":
+				return instance, fmt.Errorf("compute instance %q in database %q entered terminal status %s",
+					instanceID, databaseName, instance.Status)
+			}
+		case ctx.Err() != nil:
+			return ComputeInstance{}, fmt.Errorf("waiting for compute instance %q in database %q: %w", instanceID, databaseName, ctx.Err())
+		case !IsNotFound(err):
+			return ComputeInstance{}, err
+		}
+		tflog.Debug(ctx, "waiting for compute instance to become ready", map[string]any{
+			"workspace": workspaceSlug,
+			"database":  databaseName,
+			"instance":  instanceID,
+			"status":    instance.Status,
+		})
+		if err := sleepWithContext(ctx, interval); err != nil {
+			return ComputeInstance{}, fmt.Errorf("waiting for compute instance %q in database %q: %w",
+				instanceID, databaseName, err)
+		}
+	}
+}
+
+// WaitForComputeInstanceDeleted polls DescribeComputeInstance until the
+// instance is gone (404) or reports a terminal status.
+func (c *Client) WaitForComputeInstanceDeleted(ctx context.Context, workspaceSlug, databaseName, instanceID string) error {
+	ctx, cancel := c.waitContext(ctx)
+	defer cancel()
+	interval := c.pollInterval()
+	for {
+		instance, err := c.DescribeComputeInstance(ctx, workspaceSlug, databaseName, instanceID)
+		switch {
+		case IsNotFound(err):
+			return nil
+		case ctx.Err() != nil:
+			return fmt.Errorf("waiting for compute instance %q in database %q: %w", instanceID, databaseName, ctx.Err())
+		case err != nil:
+			return err
+		case instance.Status == "TERMINATED" || instance.Status == "DELETED":
+			return nil
+		}
+		tflog.Debug(ctx, "waiting for compute instance to be deleted", map[string]any{
+			"workspace": workspaceSlug,
+			"database":  databaseName,
+			"instance":  instanceID,
+			"status":    instance.Status,
+		})
+		if err := sleepWithContext(ctx, interval); err != nil {
+			return fmt.Errorf("waiting for compute instance %q in database %q to be deleted: %w",
+				instanceID, databaseName, err)
+		}
+	}
+}
+
+// truncate returns s clipped to at most n bytes, without splitting a UTF-8
+// rune, with an ellipsis appended when it was clipped.
 func truncate(b []byte, n int) string {
 	s := strings.TrimSpace(string(b))
 	if len(s) <= n {

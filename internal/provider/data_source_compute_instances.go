@@ -19,20 +19,19 @@ import (
 	"github.com/Golden-Apple-Research/nile-terraform/internal/nileapi"
 )
 
-// Ensure the data source satisfies the expected interfaces.
-var (
-	_ datasource.DataSource              = &computeInstancesDataSource{}
-	_ datasource.DataSourceWithConfigure = &computeInstancesDataSource{}
-)
+// computeInstancesDataSource is the generic data source implementation for
+// nile_database_compute_instances; the alias keeps the concrete name usable in
+// tests.
+type computeInstancesDataSource = readOnlyDataSource[computeInstancesDataSourceModel]
 
 // NewDatabaseComputeInstancesDataSource constructs the data source for
 // listing dedicated compute instances of a Nile database.
 func NewDatabaseComputeInstancesDataSource() datasource.DataSource {
-	return &computeInstancesDataSource{}
-}
-
-type computeInstancesDataSource struct {
-	client *nileapi.Client
+	return newReadOnlyDataSource(
+		"nile_database_compute_instances",
+		computeInstancesSchema,
+		readComputeInstances,
+	)
 }
 
 type computeInstanceModel struct {
@@ -54,12 +53,8 @@ type computeInstancesDataSourceModel struct {
 	Instances     []computeInstanceModel `tfsdk:"instances"`
 }
 
-func (d *computeInstancesDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_database_compute_instances"
-}
-
-func (d *computeInstancesDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
-	resp.Schema = schema.Schema{
+func computeInstancesSchema(_ context.Context) schema.Schema {
+	return schema.Schema{
 		MarkdownDescription: "Lists the dedicated compute instances attached to a Nile database, via " +
 			"`GET /workspaces/{workspaceSlug}/databases/{databaseName}/compute`. " +
 			"Optionally restricted to instances active within a time window (`start`/`end`).",
@@ -138,33 +133,7 @@ func (d *computeInstancesDataSource) Schema(_ context.Context, _ datasource.Sche
 	}
 }
 
-func (d *computeInstancesDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
-	if req.ProviderData == nil {
-		return
-	}
-	client, ok := req.ProviderData.(*nileapi.Client)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected data source configure type",
-			fmt.Sprintf("Expected *nileapi.Client, got: %T.", req.ProviderData),
-		)
-		return
-	}
-	d.client = client
-}
-
-func (d *computeInstancesDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	var data computeInstancesDataSourceModel
-	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	if d.client == nil {
-		resp.Diagnostics.AddError("Client not configured", "Provider client is nil; was Configure called?")
-		return
-	}
-
+func readComputeInstances(ctx context.Context, client *nileapi.Client, data *computeInstancesDataSourceModel, resp *datasource.ReadResponse) {
 	workspaceSlug := data.WorkspaceSlug.ValueString()
 	databaseName := data.DatabaseName.ValueString()
 
@@ -188,7 +157,7 @@ func (d *computeInstancesDataSource) Read(ctx context.Context, req datasource.Re
 		}
 	}
 
-	instances, err := d.client.ListComputeInstances(
+	instances, err := client.ListComputeInstances(
 		ctx, workspaceSlug, databaseName,
 		data.Start.ValueString(), data.End.ValueString(),
 	)
@@ -205,7 +174,7 @@ func (d *computeInstancesDataSource) Read(ctx context.Context, req datasource.Re
 		"workspace": workspaceSlug, "database": databaseName, "count": len(instances),
 	})
 
-	data.ID = types.StringValue(workspaceSlug + "/" + databaseName)
+	data.ID = types.StringValue(dataSourceID(workspaceSlug, databaseName))
 	data.Instances = make([]computeInstanceModel, 0, len(instances))
 	for _, ci := range instances {
 		data.Instances = append(data.Instances, computeInstanceModel{
@@ -218,13 +187,4 @@ func (d *computeInstancesDataSource) Read(ctx context.Context, req datasource.Re
 			Raw:       types.StringValue(string(ci.Raw)),
 		})
 	}
-
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-}
-
-func stringOrNull(s string) types.String {
-	if s == "" {
-		return types.StringNull()
-	}
-	return types.StringValue(s)
 }

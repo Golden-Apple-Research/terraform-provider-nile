@@ -4,11 +4,15 @@
 package nileapi
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 const sampleInstance = `{
@@ -20,11 +24,18 @@ const sampleInstance = `{
 	"created": "2025-06-01T12:00:00Z"
 }`
 
+// instantSleep replaces backoff waits in retry tests so they stay fast and
+// deterministic.
+func instantSleep(context.Context, time.Duration) error { return nil }
+
 func TestDecodeInstancesBareArray(t *testing.T) {
 	body := []byte("[" + sampleInstance + `, {"instanceId": "inst-2", "status": "TERMINATED"}]`)
-	got, err := decodeInstances(t.Context(), body)
+	got, next, err := decodeInstances(t.Context(), body)
 	if err != nil {
 		t.Fatalf("decodeInstances failed: %v", err)
+	}
+	if next != "" {
+		t.Errorf("bare array must not carry a continuation token, got %q", next)
 	}
 	if len(got) != 2 {
 		t.Fatalf("expected 2 instances, got %d", len(got))
@@ -54,7 +65,7 @@ func TestDecodeInstancesBareArray(t *testing.T) {
 func TestDecodeInstancesWrapper(t *testing.T) {
 	for _, key := range wrapperKeys {
 		body := []byte(`{"` + key + `": [{"instanceId": "wrapped-1"}], "count": 1}`)
-		got, err := decodeInstances(t.Context(), body)
+		got, _, err := decodeInstances(t.Context(), body)
 		if err != nil {
 			t.Fatalf("key %q: decodeInstances failed: %v", key, err)
 		}
@@ -64,8 +75,32 @@ func TestDecodeInstancesWrapper(t *testing.T) {
 	}
 }
 
+func TestDecodeInstancesContinuation(t *testing.T) {
+	for _, key := range continuationKeys {
+		body := []byte(`{"instances": [], "` + key + `": "tok-42"}`)
+		_, next, err := decodeInstances(t.Context(), body)
+		if err != nil {
+			t.Fatalf("key %q: decodeInstances failed: %v", key, err)
+		}
+		if next != "tok-42" {
+			t.Errorf("key %q: continuation token = %q, want %q", key, next, "tok-42")
+		}
+	}
+
+	// Missing, empty, and non-string values count as "no continuation".
+	for _, body := range []string{
+		`{"instances": []}`,
+		`{"instances": [], "nextPageToken": ""}`,
+		`{"instances": [], "cursor": 7}`,
+	} {
+		if _, next, err := decodeInstances(t.Context(), []byte(body)); err != nil || next != "" {
+			t.Errorf("body %s: next = %q, err = %v; want empty token, no error", body, next, err)
+		}
+	}
+}
+
 func TestDecodeInstancesEmptyArray(t *testing.T) {
-	got, err := decodeInstances(t.Context(), []byte(`[]`))
+	got, _, err := decodeInstances(t.Context(), []byte(`[]`))
 	if err != nil {
 		t.Fatalf("decodeInstances failed: %v", err)
 	}
@@ -75,13 +110,13 @@ func TestDecodeInstancesEmptyArray(t *testing.T) {
 }
 
 func TestDecodeInstancesUnknownObject(t *testing.T) {
-	if _, err := decodeInstances(t.Context(), []byte(`{"foo": "bar"}`)); err == nil {
+	if _, _, err := decodeInstances(t.Context(), []byte(`{"foo": "bar"}`)); err == nil {
 		t.Fatal("expected error for object without an instance array")
 	}
 }
 
 func TestDecodeInstancesWrapperNotArray(t *testing.T) {
-	if _, err := decodeInstances(t.Context(), []byte(`{"instances": {"instanceId": "x"}}`)); err == nil {
+	if _, _, err := decodeInstances(t.Context(), []byte(`{"instances": {"instanceId": "x"}}`)); err == nil {
 		t.Fatal("expected error for wrapper whose value is not an array")
 	}
 }
@@ -128,6 +163,236 @@ func TestListComputeInstances(t *testing.T) {
 	}
 }
 
+func TestListComputeInstancesPaginates(t *testing.T) {
+	var tokens []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokens = append(tokens, r.URL.Query().Get("pageToken"))
+		if r.URL.Query().Get("pageToken") == "" {
+			_, _ = w.Write([]byte(`{"instances": [{"instanceId": "p1"}], "nextPageToken": "page-2"}`))
+			return
+		}
+		// Last page may return the documented bare-array shape.
+		_, _ = w.Write([]byte(`[{"instanceId": "p2"}]`))
+	}))
+	defer srv.Close()
+
+	c, err := NewClient(srv.URL, "tok")
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	got, err := c.ListComputeInstances(t.Context(), "ws", "db", "", "")
+	if err != nil {
+		t.Fatalf("ListComputeInstances: %v", err)
+	}
+	if len(got) != 2 || got[0].ID != "p1" || got[1].ID != "p2" {
+		t.Fatalf("instances = %+v, want pages concatenated", got)
+	}
+	if len(tokens) != 2 || tokens[0] != "" || tokens[1] != "page-2" {
+		t.Errorf("page tokens sent = %v, want [\"\", \"page-2\"]", tokens)
+	}
+}
+
+func TestListComputeInstancesPaginationStuck(t *testing.T) {
+	// A server that keeps returning the same token must produce an error,
+	// not an endless loop.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"instances": [], "nextPageToken": "same-token"}`))
+	}))
+	defer srv.Close()
+
+	c, err := NewClient(srv.URL, "tok")
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	_, err = c.ListComputeInstances(t.Context(), "ws", "db", "", "")
+	if err == nil || !strings.Contains(err.Error(), "did not advance") {
+		t.Fatalf("expected pagination-stuck error, got %v", err)
+	}
+}
+
+func TestListComputeInstancesRetriesTransient(t *testing.T) {
+	var calls atomic.Int32
+	responses := []struct {
+		status int
+		body   string
+	}{
+		{http.StatusServiceUnavailable, `{"errorCode": "internal_error"}`},
+		{http.StatusTooManyRequests, `{"errorCode": "rate_limited"}`},
+		{http.StatusOK, `[{"instanceId": "ok"}]`},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		i := int(calls.Add(1)) - 1
+		if responses[i].status == http.StatusTooManyRequests {
+			w.Header().Set("Retry-After", "0")
+		}
+		w.WriteHeader(responses[i].status)
+		_, _ = w.Write([]byte(responses[i].body))
+	}))
+	defer srv.Close()
+
+	c, err := NewClient(srv.URL, "tok")
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	c.retrySleep = instantSleep
+	got, err := c.ListComputeInstances(t.Context(), "ws", "db", "", "")
+	if err != nil {
+		t.Fatalf("ListComputeInstances: %v", err)
+	}
+	if calls.Load() != 3 {
+		t.Errorf("calls = %d, want 3 (two transient failures retried)", calls.Load())
+	}
+	if len(got) != 1 || got[0].ID != "ok" {
+		t.Errorf("instances = %+v", got)
+	}
+}
+
+func TestListComputeInstancesRetriesExhausted(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"errorCode": "internal_error"}`))
+	}))
+	defer srv.Close()
+
+	c, err := NewClient(srv.URL, "tok")
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	c.retrySleep = instantSleep
+	_, err = c.ListComputeInstances(t.Context(), "ws", "db", "", "")
+	if err == nil || !strings.Contains(err.Error(), "503") {
+		t.Fatalf("expected exhausted-retries error, got %v", err)
+	}
+	if want := int64(c.MaxRetries + 1); int64(calls.Load()) != want {
+		t.Errorf("calls = %d, want %d (MaxRetries + 1)", calls.Load(), want)
+	}
+}
+
+func TestListComputeInstancesNoRetryOnClientError(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"errorCode": "bad_request"}`))
+	}))
+	defer srv.Close()
+
+	c, err := NewClient(srv.URL, "tok")
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	c.retrySleep = instantSleep
+	if _, err := c.ListComputeInstances(t.Context(), "ws", "db", "", ""); err == nil {
+		t.Fatal("expected error on 400")
+	}
+	if calls.Load() != 1 {
+		t.Errorf("calls = %d, want 1 (client errors are not retried)", calls.Load())
+	}
+}
+
+func TestListComputeInstancesRetriesNetworkErrors(t *testing.T) {
+	// Hijacking and closing the connection makes the request fail at the
+	// network level, below any HTTP status code.
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			t.Error("server does not support hijacking")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		conn, _, err := hj.Hijack()
+		if err != nil {
+			t.Errorf("hijack: %v", err)
+			return
+		}
+		_ = conn.Close()
+	}))
+	defer srv.Close()
+
+	c, err := NewClient(srv.URL, "tok")
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	c.MaxRetries = 2
+	c.retrySleep = instantSleep
+	_, err = c.ListComputeInstances(t.Context(), "ws", "db", "", "")
+	if err == nil {
+		t.Fatal("expected error after exhausting network-error retries")
+	}
+	if calls.Load() != 3 {
+		t.Errorf("calls = %d, want 3", calls.Load())
+	}
+}
+
+func TestListComputeInstancesRetrySleepErrorPropagates(t *testing.T) {
+	// If waiting is aborted (e.g. context cancellation), the error must
+	// surface instead of being retried away.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	c, err := NewClient(srv.URL, "tok")
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	c.retrySleep = func(context.Context, time.Duration) error { return errors.New("wait aborted") }
+	_, err = c.ListComputeInstances(t.Context(), "ws", "db", "", "")
+	if err == nil || !strings.Contains(err.Error(), "wait aborted") {
+		t.Fatalf("expected sleep error to propagate, got %v", err)
+	}
+}
+
+func TestRetryAfterDuration(t *testing.T) {
+	for _, tc := range []struct {
+		in        string
+		want      time.Duration
+		wantFound bool
+	}{
+		{"", 0, false},
+		{"abc", 0, false},
+		{"-1", 0, false},
+		{"0", 0, true},
+		{"2", 2 * time.Second, true},
+		{" 3 ", 3 * time.Second, true},
+		{"3600", retryAfterCap, true},                // capped
+		{"9223372036854775807", retryAfterCap, true}, // overflow-safe cap
+	} {
+		got, ok := retryAfterDuration(tc.in)
+		if ok != tc.wantFound || got != tc.want {
+			t.Errorf("retryAfterDuration(%q) = (%v, %v), want (%v, %v)", tc.in, got, ok, tc.want, tc.wantFound)
+		}
+	}
+}
+
+func TestBackoffDelay(t *testing.T) {
+	// A parseable Retry-After wins verbatim (no jitter that could shorten it).
+	resp := &http.Response{Header: http.Header{"Retry-After": []string{"7"}}}
+	if d := backoffDelay(0, resp); d != 7*time.Second {
+		t.Errorf("Retry-After ignored: delay = %v", d)
+	}
+
+	// Without Retry-After: exponential growth with equal jitter.
+	for _, tc := range []struct {
+		attempt  int
+		min, max time.Duration
+	}{
+		{0, 100 * time.Millisecond, 200 * time.Millisecond},
+		{1, 200 * time.Millisecond, 400 * time.Millisecond},
+		{2, 400 * time.Millisecond, 800 * time.Millisecond},
+		{30, retryMaxDelay / 2, retryMaxDelay}, // shift overflow capped
+	} {
+		d := backoffDelay(tc.attempt, nil)
+		if d < tc.min || d > tc.max {
+			t.Errorf("attempt %d: delay = %v, want within [%v, %v]", tc.attempt, d, tc.min, tc.max)
+		}
+	}
+}
+
 func TestListComputeInstancesErrorStatus(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
@@ -164,10 +429,10 @@ func TestNewClientRequiresHTTPScheme(t *testing.T) {
 
 func TestDecodeInstancesNull(t *testing.T) {
 	// A bare JSON null must not silently decode as an empty list.
-	if _, err := decodeInstances(t.Context(), []byte("null")); err == nil {
+	if _, _, err := decodeInstances(t.Context(), []byte("null")); err == nil {
 		t.Fatal("expected error for bare null response")
 	}
-	if _, err := decodeInstances(t.Context(), []byte(`{"instances": null}`)); err == nil {
+	if _, _, err := decodeInstances(t.Context(), []byte(`{"instances": null}`)); err == nil {
 		t.Fatal("expected error for null wrapper value")
 	}
 }

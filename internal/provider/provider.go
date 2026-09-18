@@ -122,9 +122,32 @@ func (p *nileProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 func (p *nileProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		NewDatabaseComputeInstancesDataSource,
+		NewDatabaseDataSource,
+		NewDatabasesDataSource,
+		NewDatabaseCredentialsDataSource,
+		NewDatabaseUptimeInsightsDataSource,
+		NewDatabaseErrorInsightsDataSource,
+		NewDatabaseQueryPerformanceInsightsDataSource,
+		NewComputeTypesDataSource,
+		NewRegionsDataSource,
+		NewWorkspaceDataSource,
+		NewWorkspacesDataSource,
+		NewWorkspaceComputeUsageDataSource,
+		NewWorkspaceDevelopersDataSource,
+		NewWorkspaceInvitesDataSource,
+		NewWorkspaceSubscriptionDataSource,
+		NewWorkspaceSubscriptionHistoryDataSource,
+		NewWorkspaceBillingReadinessDataSource,
+		NewWorkspaceBillingTotalsDataSource,
+		NewDeveloperDataSource,
 	}
 }
 
 func (p *nileProvider) Resources(ctx context.Context) []func() resource.Resource {
-	return nil
+	return []func() resource.Resource{
+		NewDatabaseResource,
+		NewComputeInstanceResource,
+		NewDatabaseCredentialResource,
+		NewDeveloperInviteResource,
+	}
 }

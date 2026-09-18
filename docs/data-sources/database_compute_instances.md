@@ -72,3 +72,11 @@ Invalid timestamps, empty identifiers, and inverted time windows (`start` after 
 ## Notes
 
 The provider preserves the complete API payload in `raw_json`, so fields introduced by the Nile API in the future remain accessible even before the provider exposes dedicated typed attributes for them.
+
+### Pagination
+
+The Nile API currently returns all matching instances in a single response. Should it ever introduce pagination (a response object carrying a continuation token such as `nextPageToken`), the provider follows the token automatically and concatenates all pages, so `instances` always contains the complete result. Safety guards abort with an error if a server fails to advance its page tokens.
+
+### Retries
+
+Transient failures — HTTP `408`, `429`, `500`, `502`, `503`, `504`, and network errors — are retried automatically up to three times with exponential backoff and jitter. A `Retry-After` response header takes precedence over the computed backoff (capped at 30 seconds). Client errors such as `400` or `401` are never retried.

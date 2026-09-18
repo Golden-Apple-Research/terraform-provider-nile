@@ -5,7 +5,7 @@ OUT_DIR := bin
 
 LD_FLAGS := -X main.version=$(VERSION)
 
-.PHONY: build install test fmt vet license-check smoke clean
+.PHONY: build install test fmt vet license-check smoke docs clean
 
 build:
 	mkdir -p $(OUT_DIR)
@@ -21,6 +21,9 @@ test:
 
 fmt:
 	gofmt -w .
+
+docs:
+	go run ./tools/gendocs
 
 vet:
 	go vet ./...

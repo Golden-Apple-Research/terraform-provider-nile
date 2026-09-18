@@ -13,11 +13,22 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	providerschema "github.com/hashicorp/terraform-plugin-framework/provider/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 
 	"github.com/Golden-Apple-Research/nile-terraform/internal/nileapi"
 )
+
+// containsString reports whether list contains value.
+func containsString(list []string, value string) bool {
+	for _, item := range list {
+		if item == value {
+			return true
+		}
+	}
+	return false
+}
 
 func TestProviderMetadata(t *testing.T) {
 	p := New("1.2.3")
@@ -65,23 +76,97 @@ func TestProviderSchema(t *testing.T) {
 func TestProviderDataSources(t *testing.T) {
 	p := New("test")
 
-	fns := p.DataSources(context.Background())
-	if len(fns) != 1 {
-		t.Fatalf("expected 1 data source, got %d", len(fns))
+	want := []string{
+		"nile_database_compute_instances",
+		"nile_database",
+		"nile_databases",
+		"nile_database_credentials",
+		"nile_database_uptime_insights",
+		"nile_database_error_insights",
+		"nile_database_query_performance_insights",
+		"nile_compute_types",
+		"nile_regions",
+		"nile_workspace",
+		"nile_workspaces",
+		"nile_workspace_compute_usage",
+		"nile_workspace_developers",
+		"nile_workspace_invites",
+		"nile_workspace_subscription",
+		"nile_workspace_subscription_history",
+		"nile_workspace_billing_readiness",
+		"nile_workspace_billing_totals",
+		"nile_developer",
 	}
 
-	var resp datasource.MetadataResponse
-	fns[0]().Metadata(context.Background(), datasource.MetadataRequest{ProviderTypeName: "nile"}, &resp)
-	if resp.TypeName != "nile_database_compute_instances" {
-		t.Errorf("TypeName = %q, want %q", resp.TypeName, "nile_database_compute_instances")
+	fns := p.DataSources(context.Background())
+	if len(fns) != len(want) {
+		t.Fatalf("expected %d data sources, got %d", len(want), len(fns))
+	}
+
+	got := make(map[string]bool, len(fns))
+	for _, fn := range fns {
+		ds := fn()
+		var mResp datasource.MetadataResponse
+		ds.Metadata(context.Background(), datasource.MetadataRequest{ProviderTypeName: "nile"}, &mResp)
+		if !containsString(want, mResp.TypeName) {
+			t.Errorf("unexpected data source %q", mResp.TypeName)
+		}
+		if got[mResp.TypeName] {
+			t.Errorf("duplicate data source %q", mResp.TypeName)
+		}
+		got[mResp.TypeName] = true
+
+		var sResp datasource.SchemaResponse
+		ds.Schema(context.Background(), datasource.SchemaRequest{}, &sResp)
+		if sResp.Diagnostics.HasError() {
+			t.Errorf("data source %q schema diagnostics: %v", mResp.TypeName, sResp.Diagnostics)
+		}
+	}
+	for _, name := range want {
+		if !got[name] {
+			t.Errorf("missing data source %q", name)
+		}
 	}
 }
 
-func TestProviderHasNoResources(t *testing.T) {
+func TestProviderResources(t *testing.T) {
 	p := New("test")
 
-	if got := len(p.Resources(context.Background())); got != 0 {
-		t.Errorf("expected 0 resources, got %d", got)
+	want := []string{
+		"nile_database",
+		"nile_database_compute_instance",
+		"nile_database_credential",
+		"nile_developer_invite",
+	}
+
+	fns := p.Resources(context.Background())
+	if len(fns) != len(want) {
+		t.Fatalf("expected %d resources, got %d", len(want), len(fns))
+	}
+
+	got := make(map[string]bool, len(fns))
+	for _, fn := range fns {
+		r := fn()
+		var mResp resource.MetadataResponse
+		r.Metadata(context.Background(), resource.MetadataRequest{ProviderTypeName: "nile"}, &mResp)
+		if !containsString(want, mResp.TypeName) {
+			t.Errorf("unexpected resource %q", mResp.TypeName)
+		}
+		if got[mResp.TypeName] {
+			t.Errorf("duplicate resource %q", mResp.TypeName)
+		}
+		got[mResp.TypeName] = true
+
+		var sResp resource.SchemaResponse
+		r.Schema(context.Background(), resource.SchemaRequest{}, &sResp)
+		if sResp.Diagnostics.HasError() {
+			t.Errorf("resource %q schema diagnostics: %v", mResp.TypeName, sResp.Diagnostics)
+		}
+	}
+	for _, name := range want {
+		if !got[name] {
+			t.Errorf("missing resource %q", name)
+		}
 	}
 }
 
